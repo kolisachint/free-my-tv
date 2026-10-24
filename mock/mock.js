@@ -4,6 +4,7 @@
  */
 var FLAGS = {};
 location.search.replace(/^\?/, '').split('&').forEach(function (p) { if (p) { var a = p.split('='); FLAGS[a[0]] = a[1] || '1'; } });
+if (FLAGS.norecent) { try { localStorage.setItem('mock.recent', '[]'); } catch (e) {} }
 var NOCONT = !!FLAGS.nocontinue, FIRST = NOCONT ? 1 : 0;
 var $ = function (id) { return document.getElementById(id); };
 var stage = $('stage');
@@ -47,12 +48,20 @@ function cardPic(card, on) {
     h.insertBefore(im, h.firstChild.nextSibling);
   } else if (!on && im) { im.removeAttribute('src'); h.removeChild(im); }
 }
+function stripTx(d, c) {
+  var max = Math.max(0, 96 + d.items.length * d.pitch - 28 - 1920 + 96);
+  return -Math.min(max, Math.max(0, c - 1) * d.pitch);
+}
 /* Focused row: visible cards +-1; the rows next to it keep 2 cards; every other row is unloaded. */
 function updateWindow() {
   rows.forEach(function (d, r) {
     if (d.kind === 'apps') return;
     var n = d.items.length, c = S.cols[r], lo = -1, hi = -1, dist = Math.abs(r - S.row);
-    if (dist === 0) { var first = Math.max(0, c - 1); lo = Math.max(0, first - 1); hi = Math.min(n - 1, first + 5); }
+    if (dist === 0) {
+      var tx = stripTx(d, c), j;   // every card that is on screen, plus 1 either side
+      for (j = 0; j < n; j++) { var x0 = 96 + j * d.pitch + tx; if (x0 + d.w > 0 && x0 < 1920) { if (lo < 0) lo = j; hi = j; } }
+      lo = Math.max(0, lo - 1); hi = Math.min(n - 1, hi + 1);
+    }
     else if (dist === 1 && r >= FIRST) { lo = c; hi = Math.min(n - 1, c + 1); }
     d.els.forEach(function (el, i) { cardPic(el, i >= lo && i <= hi); });
   });
@@ -100,17 +109,18 @@ function buildTop() {
   var tb = $('topbar');
   E('div', null, tb).id = 'clockT';
   E('div', null, tb).id = 'clockD';
-  var defs = [['live_tv', 'Live TV'], ['hdmi', 'HDMI Inputs'], ['settings', 'Settings']];
+  var defs = [['search', 'Search'], ['live_tv', 'Live TV'], ['hdmi', 'HDMI Inputs'], ['settings', 'Settings']];
   defs.forEach(function (d, i) {
-    var b = E('div', 'round glass', tb, null, 'left:' + (1572 + i * 92) + 'px');
-    sym(b, d[0]);
+    var b = E('div', 'round glass', tb, null, 'left:' + (1480 + i * 92) + 'px');
+    if (d[0] === 'search') magIcon(b); else sym(b, d[0]);
     E('div', 'tip', b, d[1]);
     ring(b, 68, 68, 43);
-    b.onclick = function () { setFocus('top', i); toast(d[1] + ' (mock)'); };
+    b.onclick = function () { setFocus('top', i); if (i === 0) openSearch(); else toast(d[1] + ' (mock)'); };
     topEls.push(b);
   });
   tick(); setInterval(tick, 20000);
 }
+function magIcon(parent) { var m = E('div', 'magico', parent); E('div', 'mc', m); E('div', 'mh', m); return m; }
 function tick() {
   var d = new Date(), z = function (n) { return (n < 10 ? '0' : '') + n; };
   $('clockT').textContent = z(d.getHours()) + ':' + z(d.getMinutes());
@@ -119,11 +129,73 @@ function tick() {
 }
 
 /* MARK: - Rows */
+/* MARK: - Continue: launches from this home (localStorage mock.recent) + Stremio in-progress */
+var REC_KEY = 'mock.recent';
+function findItem(id) {
+  var all = MOVIES.concat(SHOWS, EXTRA), i;
+  for (i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
+  return null;
+}
+function getLaunches() {
+  var l = null;
+  try { l = JSON.parse(localStorage.getItem(REC_KEY)); } catch (e) {}
+  if (!l) { l = SEED_LAUNCHES.map(function (x) { var it = (x.kind === 'show' ? SHOWS : MOVIES)[x.index]; return { id: it.id, kind: x.kind, title: it.name, app: x.app, at: Date.now() - x.minsAgo * 60000 }; }); putLaunches(l); }
+  return l;
+}
+function putLaunches(l) { try { localStorage.setItem(REC_KEY, JSON.stringify(l)); } catch (e) {} }
+function recordLaunch(it, app) {
+  var l = getLaunches().filter(function (x) { return x.id !== it.id; });
+  l.unshift({ id: it.id, kind: it.seasons ? 'show' : 'movie', title: it.name, app: app, at: Date.now() });
+  putLaunches(l.slice(0, 20));
+  refreshCont();
+}
+function agoText(at) {
+  var m = Math.max(1, Math.round((Date.now() - at) / 60000));
+  return 'Opened ' + (m < 60 ? m + ' min' : m < 1440 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + ' d') + ' ago';
+}
+function contItems() {
+  var out = [];
+  getLaunches().slice(0, 2).forEach(function (x) { var it = findItem(x.id); if (it) out.push({ item: it, launch: x, at: x.at }); });
+  CONTINUE.slice(0, 2).forEach(function (c) { out.push({ item: SHOWS[c.index], cont: c, at: LOAD_AT - c.minsAgo * 60000 }); });
+  out.sort(function (a, b) { return b.at - a.at; });
+  return out.slice(0, 4);
+}
+var LOAD_AT = Date.now();
+function refreshCont() {
+  var d = rows[0];
+  d.strip.innerHTML = ''; d.els = [];
+  d.items = contItems();
+  fillCards(d, 0);
+  S.cols[0] = Math.min(S.cols[0], d.items.length - 1);
+  d.el.style.display = (NOCONT || !d.items.length) ? 'none' : '';
+  updateWindow();
+}
+function fillCards(d, r) {
+  d.items.forEach(function (x, i) {
+    var c = E('div', 'card', d.strip, null, 'left:' + (96 + i * d.pitch) + 'px;width:' + d.w + 'px');
+    var img = E('div', 'img', c, null, 'width:' + d.w + 'px;height:' + d.h + 'px');
+    holder(img, x.item.bg.replace('/medium/', '/small/'), x.item.name);
+    if (d.kind === 'cont') {
+      E('div', 'shade', img);
+      if (x.cont) {
+        E('div', 'left', img, 'S' + x.cont.season + ' E' + x.cont.ep + ' \u00B7 ' + x.cont.minsLeft + ' min left');
+        var bar = E('div', 'bar', img); E('i', null, bar, null, 'width:' + x.cont.pct + '%');
+      }
+      E('div', 'tag', img, x.cont ? 'Stremio' : x.launch.app);
+    }
+    var host2 = E('div', 'ringhost', c, null, 'width:' + d.w + 'px;height:' + d.h + 'px');
+    ring(host2, d.w, d.h, 28);
+    E('div', 't clip1', c, x.item.name, 'top:' + (d.h + 22) + 'px;width:' + d.w + 'px');
+    if (d.kind === 'cont') E('div', 'm clip1', c, x.cont ? x.cont.minsLeft + ' min left' : agoText(x.launch.at), 'top:' + (d.h + 60) + 'px;width:' + d.w + 'px');
+    else E('div', 'm clip1', c, x.item.year + ' \u00B7 IMDb ' + x.item.rating.toFixed(1), 'top:' + (d.h + 60) + 'px;width:' + d.w + 'px');
+    c.onclick = function () { setFocus('rows', r, i); activate(); };
+    d.els.push(c);
+  });
+}
 function buildRows() {
   var host = $('rows');
-  var cont = CONTINUE.map(function (c) { return { item: SHOWS[c.index], cont: c }; });
   var defs = [
-    { title: 'Continue in Stremio', kind: 'cont', items: cont, w: 520, h: 293, pitch: 576 },
+    { title: 'Continue', kind: 'cont', items: contItems(), w: 412, h: 232, pitch: 440 },
     { title: 'Movies', kind: 'movie', items: MOVIES.slice(0, 15).map(function (m) { return { item: m }; }), w: 360, h: 203, pitch: 392 },
     { title: 'Shows', kind: 'show', items: SHOWS.slice(0, 15).map(function (m) { return { item: m }; }), w: 360, h: 203, pitch: 392 },
     { title: 'Apps', kind: 'apps', items: APPS.map(function (a) { return { app: a }; }) }
@@ -147,23 +219,7 @@ function buildRows() {
         d.els.push(t);
       });
     } else {
-      d.items.forEach(function (x, i) {
-        var c = E('div', 'card', d.strip, null, 'left:' + (96 + i * d.pitch) + 'px;width:' + d.w + 'px');
-        var img = E('div', 'img', c, null, 'width:' + d.w + 'px;height:' + d.h + 'px');
-        holder(img, x.item.bg.replace('/medium/', '/small/'), x.item.name);
-        if (d.kind === 'cont') {
-          E('div', 'shade', img);
-          E('div', 'left', img, 'S' + x.cont.season + ' E' + x.cont.ep + ' \u00B7 ' + x.cont.minsLeft + ' min left');
-          var bar = E('div', 'bar', img); E('i', null, bar, null, 'width:' + x.cont.pct + '%');
-          E('div', 'tag', img, 'Stremio');
-        }
-        var host2 = E('div', 'ringhost', c, null, 'width:' + d.w + 'px;height:' + d.h + 'px');
-        ring(host2, d.w, d.h, 28);
-        E('div', 't clip1', c, x.item.name, 'top:' + (d.h + 22) + 'px;width:' + d.w + 'px');
-        if (d.kind !== 'cont') E('div', 'm clip1', c, x.item.year + ' \u00B7 IMDb ' + x.item.rating.toFixed(1), 'top:' + (d.h + 60) + 'px;width:' + d.w + 'px');
-        c.onclick = function () { setFocus('rows', r, i); activate(); };
-        d.els.push(c);
-      });
+      fillCards(d, r);
     }
     rows.push(d);
   });
@@ -212,8 +268,7 @@ function setFocus(zone, a, b) {
     d.els[c].classList.add('focus'); d.el.classList.add('on');
     d.count.textContent = (c + 1) + ' / ' + d.items.length;
     if (d.kind !== 'apps') {
-      var max = Math.max(0, 96 + d.items.length * d.pitch - 28 - 1920 + 96);
-      var tx = -Math.min(max, Math.max(0, c - 1) * d.pitch);
+      var tx = stripTx(d, c);
       d.strip.style.webkitTransform = d.strip.style.transform = 'translateX(' + tx + 'px)';
       setHero(d.items[c].item);
     }
@@ -252,9 +307,11 @@ function openDrawer() { S.zone = 'drawer'; S.dr = 0; S.dc = 0; stage.classList.a
 function closeDrawer() { stage.classList.remove('drawer-open'); setFocus('rows', 3); }
 
 /* MARK: - Details sheet */
-function openDetails(r, c) {
-  var d = rows[r], x = d.items[c], it = x.item;
-  S.det = { back: [r, c], idx: 1, els: [], acts: [] };
+var lastDetItem = null;
+function openDetails(r, c, direct) {
+  var x = direct ? { item: direct } : rows[r].items[c], it = x.item;
+  lastDetItem = it;
+  S.det = { back: direct ? ['search'] : [r, c], idx: 1, els: [], acts: [] };
   var sh = $('sheet'); sh.innerHTML = '';
   var P = E('div', null, sh); P.id = 'sheetPanel';
   var bg = E('div', null, P); bg.id = 'sBg'; pic(bg, it.bg, it.name);
@@ -264,7 +321,7 @@ function openDetails(r, c) {
   E('div', null, P, metaLine(it)).id = 'sMeta';
   E('div', null, P, it.overview).id = 'sOv';
   E('div', null, P, 'Cast: ' + it.cast.join(', ')).id = 'sCast';
-  var app = x.cont ? 'Stremio' : firstInstalled(it);
+  var app = x.cont ? 'Stremio' : x.launch ? x.launch.app : firstInstalled(it);
   var wl = x.cont ? 'Resume S' + x.cont.season + ' E' + x.cont.ep + ' in Stremio' : 'Watch in ' + app;
   var w2 = Math.round(wl.length * 15.5 + 64);
   var b1 = E('div', 'btn sec', P, 'Play trailer', 'left:392px;width:320px'); ring(b1, 320, 78, 48);
@@ -276,7 +333,7 @@ function openDetails(r, c) {
   var det = S.det;
   det.els = [b1, b2]; det.acts = [
     function () { toast('Opens YouTube to play the trailer (mock): ' + it.name); },
-    function () { toast('Opens ' + app + (x.cont ? ' at S' + x.cont.season + ' E' + x.cont.ep : '') + ' (mock)'); }
+    function () { toast('Opens ' + app + (x.cont ? ' at S' + x.cont.season + ' E' + x.cont.ep : '') + ' (mock)'); if (!x.cont) recordLaunch(it, app); }
   ];
   b1.onclick = function () { detFocus(0); detAct(); }; b2.onclick = function () { detFocus(1); detAct(); };
   var y = 84, labels = { stream: 'STREAM', rent: 'RENT', buy: 'BUY' };
@@ -290,7 +347,7 @@ function openDetails(r, c) {
     var i = det.els.length;
     w.onclick = function () { detFocus(i); detAct(); };
     det.els.push(w);
-    det.acts.push(function () { toast(p.installed ? 'Opens ' + p.name + (stremio ? ' (Stremio stream)' : '') + ' (mock)' : p.name + ' is not installed on this TV'); });
+    det.acts.push(function () { toast(p.installed ? 'Opens ' + p.name + (stremio ? ' (Stremio stream)' : '') + ' (mock)' : p.name + ' is not installed on this TV'); if (p.installed) recordLaunch(it, p.name); });
     y += 68;
   }
   waysFor(it).forEach(function (g) {
@@ -313,6 +370,8 @@ function detAct() { S.det.acts[S.det.idx](); }
 function closeDetails() {
   var b = S.det.back; S.det = null;
   stage.classList.remove('sheet-open');
+  if (b[0] === 'search') { S.zone = 'search'; applyFocus(); return; }
+  if (b[0] === 0 && !NOCONT) { var cur = rows[0].items[b[1]]; if (!cur || cur.item !== lastDetItem) b[1] = 0; }
   setFocus('rows', b[0], b[1]);
 }
 
@@ -321,8 +380,10 @@ function activate() {
   if (S.zone === 'rows') {
     var d = rows[S.row], c = S.cols[S.row];
     if (d.kind === 'apps') toast('Opens ' + d.items[c].app.name + ' (mock)');
+    else if (d.items[c].cont) toast('Resuming in Stremio');
     else openDetails(S.row, c);
-  } else if (S.zone === 'top') toast(['Live TV', 'HDMI Inputs', 'Settings'][S.top] + ' (mock)');
+  } else if (S.zone === 'search') searchAct();
+  else if (S.zone === 'top') { if (S.top === 0) openSearch(); else toast(['', 'Live TV', 'HDMI Inputs', 'Settings'][S.top] + ' (mock)'); }
   else if (S.zone === 'drawer') {
     var t = drawerEls[S.dr][S.dc];
     toast(t.className.indexOf('off') >= 0 ? t.firstChild.nextSibling.textContent + ' has no signal' : t.childNodes[1].textContent + ' (mock)');
@@ -331,7 +392,7 @@ function activate() {
 function move(dx, dy) {
   var z = S.zone;
   if (z === 'top') {
-    if (dx) setFocus('top', Math.max(0, Math.min(2, S.top + dx)));
+    if (dx) setFocus('top', Math.max(0, Math.min(3, S.top + dx)));
     else if (dy > 0) setFocus('rows', FIRST);
   } else if (z === 'rows') {
     var d = rows[S.row];
@@ -343,14 +404,16 @@ function move(dx, dy) {
     else if (dy > 0 && S.dr === 0) { S.dr = 1; S.dc = Math.min(S.dc, 2); }
     else if (dy < 0) { if (S.dr === 1) { S.dr = 0; } else { closeDrawer(); return; } }
     setDrawerFocus();
-  } else if (z === 'details') {
+  } else if (z === 'search') searchMove(dx, dy);
+  else if (z === 'details') {
     var i = S.det.idx, n = S.det.els.length;
     if (i < 2) { if (dx < 0 && i === 1) detFocus(0); else if (dx > 0 && i === 0) detFocus(1); else if (dx > 0 && i === 1) detFocus(2); }
     else { if (dx < 0) detFocus(1); else if (dy) detFocus(Math.max(2, Math.min(n - 1, i + dy))); }
   }
 }
 function back() {
-  if (S.zone === 'details') closeDetails();
+  if (S.zone === 'search') { if (MIC) { cancelMic(); } else closeSearch(); }
+  else if (S.zone === 'details') closeDetails();
   else if (S.zone === 'drawer') closeDrawer();
   else if (S.zone === 'top') setFocus('rows', S.row);
   else toast('Back: already on Home');
@@ -361,6 +424,7 @@ function setLow(on) { S.lowram = on; stage.classList.toggle('lowram', on); }
 function onKey(e) {
   if (e.__done) return; e.__done = true;
   var k = e.key, used = true;
+  if (S.zone === 'search' && !OV) { searchKey(e, k); return; }
   if (OV) {
     if (k === 'o' || k === 'O' || k === 'Escape') leaveOverview();
     else if (k === 'n' || k === 'N') { setNight(!S.night); }
@@ -378,6 +442,8 @@ function onKey(e) {
   else if (k === 'r' || k === 'R') { setLow(!S.lowram); toast(S.lowram ? 'No shadows at all (lighter variant)' : 'Single soft shadow (default)'); }
   else if (k === 'd' || k === 'D') toggleDebug();
   else if (k === 'o' || k === 'O') enterOverview();
+  else if ((k === 's' || k === 'S' || k === '/') && (S.zone === 'rows' || S.zone === 'top')) openSearch();
+  else if ((k === 'm' || k === 'M') && (S.zone === 'rows' || S.zone === 'top')) { openSearch(); startMic(); }
   else if (k === 'h' || k === 'H') $('hint').classList.toggle('off');
   else used = false;
   if (used) e.preventDefault();
@@ -469,12 +535,12 @@ function buildOverview() {
   var wrap = E('div', 'ovwrap', box), y = 0;
   var nm = [rows[1].items.length, rows[2].items.length];
   var heroItem = rows[1].items[0].item;
-  sec(wrap, 'Top bar (clock + 3 round buttons)', 150, function (b) { var c = $('topbar').cloneNode(true); c.removeAttribute('id'); stripFocus(c); b.appendChild(c); });
+  sec(wrap, 'Top bar (clock + 4 round buttons: Search, Live TV, HDMI Inputs, Settings)', 150, function (b) { var c = $('topbar').cloneNode(true); c.removeAttribute('id'); stripFocus(c); b.appendChild(c); });
   sec(wrap, 'Hero (follows focus: backdrop, title, meta, overview, installed-app badges)', 600, function (b) {
     var hs = E('div', 'hslide on', b), ht = E('div', 'htext on', b);
     fillHero(hs, ht, heroItem);
   });
-  if (!NOCONT) sec(wrap, 'Continue in Stremio row (2, hidden when empty)', 470, function (b) {
+  if (!NOCONT) sec(wrap, 'Continue (last 2 opened from home + last 2 Stremio, \u2264 4; hidden when empty)', 470, function (b) {
     var c = rows[0].el.cloneNode(true); stripFocus(c); loadClone(c); c.style.top = '0px';
     c.querySelector('.strip').style.webkitTransform = c.querySelector('.strip').style.transform = 'none'; c.className = 'row'; b.appendChild(c);
   });
@@ -495,8 +561,12 @@ function buildOverview() {
     b.appendChild(p);
     S.det = sd; S.zone = sz; stage.classList.remove('sheet-open'); $('sheet').innerHTML = '';
   });
-  sec(wrap, 'State: Continue row hidden when Stremio has nothing in progress (?nocontinue)' + (NOCONT ? ' [active now]' : ''), 130, function (b) {
-    E('div', 'ovnote', b, 'With ?nocontinue the Continue in Stremio row is not built, the first focus lands on Movies, and Up from Movies goes to the top bar.');
+  sec(wrap, 'Search (full screen: query field + mic chip, TV keyboard, best match, results row, apps row). Example query: spider', 1080, function (b) {
+    b.appendChild(searchSnapshot('spider'));
+    E('div', 'ovnote', b, 'Other search states: empty query (Recent searches + Trending chips), no results (message + Trending), mic (Listening... with level bars). Open with S or /, mic with M.', 'top:auto;bottom:10px;left:96px;width:1500px;font-size:26px;line-height:34px;background:#1D1D1F;color:#fff;padding:6px 16px;border-radius:12px;z-index:5');
+  });
+  sec(wrap, 'State: Continue row hidden (?nocontinue)' + (NOCONT ? ' [active now]' : ''), 130, function (b) {
+    E('div', 'ovnote', b, 'With ?nocontinue the Continue row is not built, the first focus lands on Movies, and Up from Movies goes to the top bar.');
   });
   sec(wrap, 'Debug overlay (D / ?debug): top-left panel, not drawn here', 90, function () {});
   sec(wrap, 'Hint strip + toast: bottom-right keys, bottom-centre pill (not drawn here)', 90, function () {});
@@ -551,6 +621,6 @@ buildTop(); buildRows(); buildDrawer(); fit();
   if (f.focus) { var a = f.focus.split(':'); setFocus('rows', kinds[a[0]], +a[1]); }
   if (f.details) { var b = f.details.split(':'); setFocus('rows', kinds[b[0]], +b[1]); openDetails(kinds[b[0]], +b[1]); }
   if (f.drawer) { setFocus('rows', 3, 0); openDrawer(); }
-  if (f.overview) enterOverview();
+  if (f.overview) document.addEventListener('DOMContentLoaded', enterOverview);
   grab();
 })();

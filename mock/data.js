@@ -626,9 +626,15 @@ var SHOWS = [
 var INSTALLED = ['Netflix', 'YouTube', 'Prime Video', 'Apple TV', 'JioHotstar', 'Stremio'];  // the real TV; Disney+ and SonyLIV are NOT installed
 
 // FAKE: Continue in Stremio, two shows from SHOWS with invented progress.
+// FAKE: seed for 'opened from home' launches (real ones are saved in localStorage mock.recent).
+var SEED_LAUNCHES = [
+  { kind: 'movie', index: 3, app: 'Netflix', minsAgo: 180 },
+  { kind: 'show', index: 2, app: 'Prime Video', minsAgo: 300 }
+];
+// FAKE: Stremio in-progress items (newest first by minsAgo).
 var CONTINUE = [
-  { index: 8, season: 2, ep: 5, minsLeft: 23, pct: 46 },
-  { index: 6, season: 3, ep: 2, minsLeft: 31, pct: 28 }
+  { index: 8, season: 2, ep: 5, minsLeft: 23, pct: 46, minsAgo: 90 },
+  { index: 6, season: 3, ep: 2, minsLeft: 31, pct: 28, minsAgo: 540 }
 ];
 
 // FAKE: app shelf. Brand colors only; the real shelf uses the TV's own icons. Only INSTALLED apps are shown.
@@ -658,3 +664,351 @@ function providersFor(item) {
   out.forEach(function (p) { p.installed = INSTALLED.indexOf(p.name) >= 0; });
   return out;
 }
+
+// Extra titles ONLY for search (not in any row). Real Cinemeta data (incl. Indian titles); providers are FAKE like the rest.
+var EXTRA = [
+ {
+  "id": "tt8178634",
+  "name": "RRR",
+  "year": "2022",
+  "genres": [
+   "Action",
+   "Adventure"
+  ],
+  "minutes": 187,
+  "rating": 7.8,
+  "overview": "A fearless warrior on a perilous mission comes face to face with a steely cop serving British forces in this epic saga set in pre-independent India.",
+  "cast": [
+   "N.T. Rama Rao Jr.",
+   "Ram Charan",
+   "Ajay Devgn"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt8178634/img",
+  "bg": "https://images.metahub.space/background/medium/tt8178634/img",
+  "trailer": "",
+  "type": "movie"
+ },
+ {
+  "id": "tt12844910",
+  "name": "Pathaan",
+  "year": "2023",
+  "genres": [
+   "Action",
+   "Adventure"
+  ],
+  "minutes": 146,
+  "rating": 5.8,
+  "overview": "An Indian agent races against a doomsday clock as a ruthless mercenary, with a bitter vendetta, mounts an apocalyptic attack against the country.",
+  "cast": [
+   "Shah Rukh Khan",
+   "Deepika Padukone",
+   "John Abraham"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt12844910/img",
+  "bg": "https://images.metahub.space/background/medium/tt12844910/img",
+  "trailer": "",
+  "type": "movie"
+ },
+ {
+  "id": "tt1187043",
+  "name": "3 Idiots",
+  "year": "2009",
+  "genres": [
+   "Comedy",
+   "Drama"
+  ],
+  "minutes": 171,
+  "rating": 8.4,
+  "overview": "Two friends search for a brilliant, free-spirited classmate whose unconventional approach to engineering school changed their lives and challenged a rigid education system.",
+  "cast": [
+   "Aamir Khan",
+   "Madhavan",
+   "Mona Singh"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt1187043/img",
+  "bg": "https://images.metahub.space/background/medium/tt1187043/img",
+  "trailer": "",
+  "type": "movie"
+ },
+ {
+  "id": "tt5074352",
+  "name": "Dangal",
+  "year": "2016",
+  "genres": [
+   "Action",
+   "Biography"
+  ],
+  "minutes": 161,
+  "rating": 8.3,
+  "overview": "Mahavir Singh Phogat, a former wrestler, decides to fulfill his dream of winning a gold medal for his country by training his daughters for the Commonwealth Games despite the existing social stigmas.",
+  "cast": [
+   "Aamir Khan",
+   "Sakshi Tanwar",
+   "Fatima Sana Shaikh"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt5074352/img",
+  "bg": "https://images.metahub.space/background/medium/tt5074352/img",
+  "trailer": "",
+  "type": "movie"
+ },
+ {
+  "id": "tt15354916",
+  "name": "Jawan",
+  "year": "2023",
+  "genres": [
+   "Action",
+   "Crime"
+  ],
+  "minutes": 169,
+  "rating": 6.9,
+  "overview": "A prison warden recruits inmates to commit outrageous crimes that shed light on corruption and injustice - and that lead him to an unexpected reunion.",
+  "cast": [
+   "Shah Rukh Khan",
+   "Nayanthara",
+   "Vijay Sethupathi"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt15354916/img",
+  "bg": "https://images.metahub.space/background/medium/tt15354916/img",
+  "trailer": "",
+  "type": "movie"
+ },
+ {
+  "id": "tt2395469",
+  "name": "Gully Boy",
+  "year": "2019",
+  "genres": [
+   "Drama",
+   "Music"
+  ],
+  "minutes": 156,
+  "rating": 7.9,
+  "overview": "A coming-of-age story based on the lives of street rappers in Mumbai.",
+  "cast": [
+   "Ranveer Singh",
+   "Alia Bhatt",
+   "Siddhant Chaturvedi"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt2395469/img",
+  "bg": "https://images.metahub.space/background/medium/tt2395469/img",
+  "trailer": "",
+  "type": "movie"
+ },
+ {
+  "id": "tt1375666",
+  "name": "Inception",
+  "year": "2010",
+  "genres": [
+   "Adventure",
+   "Sci-Fi"
+  ],
+  "minutes": 148,
+  "rating": 8.8,
+  "overview": "A thief who steals corporate secrets through the use of dream-sharing technology is given the inverse task of planting an idea into the mind of a CEO, but his tragic past may doom the project and his team to disaster.",
+  "cast": [
+   "Leonardo DiCaprio",
+   "Joseph Gordon-Levitt",
+   "Elliot Page"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt1375666/img",
+  "bg": "https://images.metahub.space/background/medium/tt1375666/img",
+  "trailer": "",
+  "type": "movie"
+ },
+ {
+  "id": "tt0816692",
+  "name": "Interstellar",
+  "year": "2014",
+  "genres": [
+   "Adventure",
+   "Sci-Fi"
+  ],
+  "minutes": 169,
+  "rating": 8.7,
+  "overview": "In a dystopian future where Earth has become near-uninhabitable, a team of astronauts embark on a mission to find a new home for humanity.",
+  "cast": [
+   "Matthew McConaughey",
+   "Anne Hathaway",
+   "Jessica Chastain"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt0816692/img",
+  "bg": "https://images.metahub.space/background/medium/tt0816692/img",
+  "trailer": "",
+  "type": "movie"
+ },
+ {
+  "id": "tt12004706",
+  "name": "Panchayat",
+  "year": "2020",
+  "genres": [
+   "Comedy",
+   "Drama"
+  ],
+  "minutes": 36,
+  "rating": 9,
+  "overview": "A comedy-drama, which captures the journey of an engineering graduate Abhishek, who for lack of a better job option joins as secretary of a Panchayat office in a remote village of Uttar Pradesh.",
+  "cast": [
+   "Jitendra Kumar",
+   "Raghubir Yadav",
+   "Chandan Roy"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt12004706/img",
+  "bg": "https://images.metahub.space/background/medium/tt12004706/img",
+  "trailer": "",
+  "type": "show",
+  "seasons": 4
+ },
+ {
+  "id": "tt12392504",
+  "name": "Scam 1992: The Harshad Mehta Story",
+  "year": "2020",
+  "genres": [
+   "Biography",
+   "Crime"
+  ],
+  "minutes": 52,
+  "rating": 9.2,
+  "overview": "The rise and fall of Harshad Mehta, a stockbroker who single-handedly took the stock market to great heights, is depicted.",
+  "cast": [
+   "Pratik Gandhi",
+   "Shreya Dhanwanthary",
+   "Hemant Kher"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt12392504/img",
+  "bg": "https://images.metahub.space/background/medium/tt12392504/img",
+  "trailer": "",
+  "type": "show",
+  "seasons": 1
+ },
+ {
+  "id": "tt6077448",
+  "name": "Sacred Games",
+  "year": "2018",
+  "genres": [
+   "Action",
+   "Crime"
+  ],
+  "minutes": 50,
+  "rating": 8.5,
+  "overview": "A link in their pasts leads an honest cop to a fugitive gang boss, whose cryptic warning spurs the officer on a quest to save Mumbai from cataclysm.",
+  "cast": [
+   "Nawazuddin Siddiqui",
+   "Saif Ali Khan",
+   "Neeraj Kabi"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt6077448/img",
+  "bg": "https://images.metahub.space/background/medium/tt6077448/img",
+  "trailer": "",
+  "type": "show",
+  "seasons": 2
+ },
+ {
+  "id": "tt6473300",
+  "name": "Mirzapur",
+  "year": "2018",
+  "genres": [
+   "Action",
+   "Crime"
+  ],
+  "minutes": 51,
+  "rating": 8.4,
+  "overview": "A shocking incident at a wedding procession ignites a series of events entangling the lives of two families in the lawless city of Mirzapur.",
+  "cast": [
+   "Ali Fazal",
+   "Rasika Dugal",
+   "Shweta Tripathi"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt6473300/img",
+  "bg": "https://images.metahub.space/background/medium/tt6473300/img",
+  "trailer": "",
+  "type": "show",
+  "seasons": 3
+ },
+ {
+  "id": "tt9544034",
+  "name": "The Family Man",
+  "year": "2019",
+  "genres": [
+   "Action",
+   "Comedy"
+  ],
+  "minutes": 48,
+  "rating": 8.6,
+  "overview": "A working man from the National Investigation Agency tries to protect the nation from terrorism, but he also needs to keep his family safe from his secret job.",
+  "cast": [
+   "Manoj Bajpayee",
+   "Samantha Ruth Prabhu",
+   "Priyamani"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt9544034/img",
+  "bg": "https://images.metahub.space/background/medium/tt9544034/img",
+  "trailer": "",
+  "type": "show",
+  "seasons": 3
+ },
+ {
+  "id": "tt9398466",
+  "name": "Delhi Crime",
+  "year": "2019",
+  "genres": [
+   "Crime",
+   "Drama"
+  ],
+  "minutes": 48,
+  "rating": 8.4,
+  "overview": "Based on the Nirbhaya case, Delhi Crime follows the Delhi Police investigation into the finding of the men who perpetrated this crime.",
+  "cast": [
+   "Shefali Shah",
+   "Rajesh Tailang",
+   "Rasika Dugal"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt9398466/img",
+  "bg": "https://images.metahub.space/background/medium/tt9398466/img",
+  "trailer": "",
+  "type": "show",
+  "seasons": 3
+ },
+ {
+  "id": "tt4574334",
+  "name": "Stranger Things",
+  "year": "2016",
+  "genres": [
+   "Drama",
+   "Fantasy"
+  ],
+  "minutes": 65,
+  "rating": 8.6,
+  "overview": "In 1980s Indiana, a group of young friends witness supernatural forces and secret government exploits. As they search for answers, the children unravel a series of extraordinary mysteries.",
+  "cast": [
+   "Millie Bobby Brown",
+   "Finn Wolfhard",
+   "Winona Ryder"
+  ],
+  "poster": "https://images.metahub.space/poster/medium/tt4574334/img",
+  "bg": "https://images.metahub.space/background/medium/tt4574334/img",
+  "trailer": "",
+  "type": "show",
+  "seasons": 5
+ },
+ {
+  "id": "tt6468322",
+  "name": "Money Heist",
+  "year": "2017",
+  "genres": [
+   "Crime",
+   "Drama"
+  ],
+  "minutes": 70,
+  "rating": 8.2,
+  "overview": "To carry out the biggest heist in history, a mysterious man called The Professor recruits a band of eight robbers who have a single characteristic: none of them has anything to lose. Five months of seclusion - memorizing every step, every detail, every probability - culminate in eleven days locked up in the National Coinage and Stamp Factory of Spain, surrounded by police forces and with dozens of hostages in their power, to find out whether their suicide wager will lead to everything or nothing.",
+  "cast": [
+   "Úrsula Corberó",
+   "Itziar Ituño",
+   "Álvaro Morte"
+  ],
+  "poster": "https://live.metahub.space/poster/medium/tt6468322/img",
+  "bg": "https://live.metahub.space/background/medium/tt6468322/img",
+  "trailer": "",
+  "type": "show",
+  "seasons": 5
+ }
+];

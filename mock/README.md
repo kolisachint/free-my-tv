@@ -25,13 +25,16 @@ Images load from the internet (metahub, Cinemeta). Offline, cards show a gradien
 | Mouse wheel | Down / up one row (throttled); shift+wheel or sideways wheel = left / right |
 | Hover / click / right-click | Hover focuses, click = Enter, right-click = Back |
 | R | No shadows at all on / off |
-| D | Debug overlay: images loaded, estimated decoded MB, last frame ms |
+| D | Debug overlay (bottom-left, above the hint strip): images loaded, estimated decoded MB, last frame ms |
+| S or / | Search (letters type inside it; Backspace deletes, Back when empty) |
+| M | Simulated remote mic: "Listening…" ~1.5 s, then a sample phrase is searched |
 
 Down from the Apps shelf opens the drawer. Up from its first row closes it.
 
 ## URL flags (for screenshots)
 
-`?overview` `?night` `?drawer` `?nocontinue` (Continue row hidden, focus starts on Movies)
+`?overview` `?night` `?drawer` `?nocontinue` (Continue row hidden, focus starts on Movies) `?norecent` (clears the saved launch history; the Continue row then shows only Stremio items)
+`?search` `?search=spider` `?search=xyzq` `?mic` (open Search, with a query, with no results, or already listening)
 `?lowram` (lighter variant of the default: no shadows at all; same as key R) `?debug` (debug overlay, same as key D)
  `?details=movie:2` `?details=show:3` `?details=cont:0`
 `?focus=movie:5` `?focus=apps:2` (combine with `&`).
@@ -41,12 +44,12 @@ Down from the Apps shelf opens the drawer. Up from its first row closes it.
 1. **Stage**: fixed 1920x1080, scaled by transform.
 2. **Page background**: day/night vertical gradient.
 3. **Clock**: time + short date, top left.
-4. **Round glass buttons** (3): Live TV, HDMI Inputs, Settings; name shown on focus.
+4. **Round glass buttons** (4): Search (first), Live TV, HDMI Inputs, Settings; name shown on focus.
 5. **Hero backdrop**: focused item's image, masked to fade into the page; crossfades.
 6. **Hero text**: title, meta line, 2-line overview.
 7. **Where-to-watch badges**: installed apps only (check icon), Stremio last. `INSTALLED` in `data.js` drives shelf, chips and details sheet.
 8. **Row label + position counter** ("3 / 15", only on the focused row).
-9. **Continue card** (landscape, 2): Stremio tag, "S2 E5 · 23 min left", progress bar.
+9. **Component: Continue** (row "Continue", landscape cards, ≤ 4): last 2 items opened from home + last 2 Stremio in-progress, merged newest first. Each card has an app badge ("Netflix", "Stremio"…) and a second line ("Opened 2 h ago" / "23 min left"). Launches are recorded when Watch (or an installed way to watch) is pressed in the details sheet, including from Search; stored in `localStorage` key `mock.recent` as `{id, kind, title, app, at}`, newest first, de-duplicated by title, max 20, seeded on first load (a Netflix movie, a Prime show). A launch card reopens the details sheet (Watch = same app); a Stremio card toasts "Resuming in Stremio" and shows a progress bar + "S2 E5 · 23 min left". Row hidden when empty or with `?nocontinue`.
 10. **Media card** (landscape, 15 movies, 15 shows): image, title, year · IMDb.
 11. **Card fallback**: gradient + title when an image fails.
 12. **Focus treatment**: scale 1.08 + thick border + outer outline.
@@ -57,16 +60,17 @@ Down from the Apps shelf opens the drawer. Up from its first row closes it.
 17. **Ways to watch panel**: Stream / Rent / Buy groups, "Installed" / "Not installed" labels, "via Stremio" last.
 18. **Footnote**: "Where-to-watch data: JustWatch via TMDB".
 19. **Toast**: bottom pill for every fake action.
-20. **Debug overlay** (D): top-left stats panel.
+20. **Debug overlay** (D): bottom-left stats panel (above the hint strip, clear of the clock).
 20b. **Hint strip**: bottom-right key list (H hides).
 21. **Overview mode**: the labelled all-in-one page.
 22. **Day/night + low-RAM switches**.
+23. **Component: Search** (`search.js`): full-screen sheet; query field (52 px) with caret + mic chip; on-screen TV keyboard (a-z, 0-9, Space, Delete, Clear) plus real typing; results after 2+ letters with 300 ms debounce; best match as a big hero card, a "Movies & shows" row and an "Apps" row; empty state "No results for ‘xyz’. Try a shorter word."; before typing: Recent searches (localStorage `fmtv_recent`, max 5) and Trending chips. Matching is case/accent-insensitive, word-prefix + substring, 1-edit typo for words of 4+ letters, over title (primary), cast and genre (secondary) and installed app names. About 15 search-only titles (`EXTRA` in `data.js`, Cinemeta data; providers FAKE) include Indian ones. Enter on a title opens the details sheet and Back returns to the search with focus kept; Enter on an app toasts "Opening Netflix"; Back from search returns to the Search button.
 
 ## Performance plan (the default profile; target Sony BRAVIA, Android 12, 2.85 GB RAM, ~80 MB free, Mali-G52, 1920x1080)
 
 - 15 Movies + 15 Shows.
 - Card images at small size (metahub `small`, about w300); hero and details backdrop at medium.
-- Windowed image loading: only cards in the focused row's visible window +-1 hold an image; the rows next to it keep 2; every other row is back to a gradient + title placeholder. The old hero image is dropped after the fade.
+- Windowed image loading: every card visible on screen in the focused row, plus 1 either side, holds an image; the rows next to it keep 2; every other row is back to a gradient + title placeholder. The old hero image is dropped after the fade.
 - No large blurred shadows: one small soft shadow (`0 4px 12px`); `?lowram` / R removes shadows entirely.
 - Focus animation: transform only, 150 ms. Hero crossfade: opacity only, 150 ms.
 - Debug overlay (D) shows loaded images, estimated decoded memory (w x h x 4 at displayed size) and last frame time against the budget: <= 10 full images, <= 16 MB.
@@ -74,5 +78,5 @@ Down from the Apps shelf opens the drawer. Up from its first row closes it.
 
 ## Fake
 
-Providers, prices and continue-watching progress are invented (see `data.js`). Titles, overviews, casts and
+Providers, prices and Stremio progress and the seeded launch history are invented (see `data.js`). Titles, overviews, casts and
 images are real (Cinemeta). Images come from metahub, not TMDB w780/w1280 (no TMDB key needed).

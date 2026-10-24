@@ -260,8 +260,74 @@ html.ovmode, body.ovmode { overflow-y: auto; overflow-x: hidden; height: auto; }
 .ovb .row { position: absolute; left: 0; top: 0; opacity: 1 !important; }
 .ovb .rcount { display: none; }
 
-#dbg { position: absolute; left: 24px; top: 24px; padding: 14px 22px; border-radius: 16px; background: rgba(0, 0, 0, 0.88); color: #FFF; font-size: 26px; line-height: 38px; z-index: 30; pointer-events: none; font-weight: 500; }
+#dbg { position: absolute; left: 24px; bottom: 72px; padding: 14px 22px; border-radius: 16px; background: rgba(0, 0, 0, 0.88); color: #FFF; font-size: 26px; line-height: 38px; z-index: 30; pointer-events: none; font-weight: 500; }
 #dbg b { font-weight: 800; color: #FFE27A; }
 #dbg small { font-size: 24px; color: #DDD; }
 .ovnote { position: absolute; left: 96px; top: 24px; width: 1500px; font-size: 30px; line-height: 44px; }
 .ovb #sheetPanel, .ovb > div[style] { }
+
+/* MARK: - Search */
+#search { z-index: 2; opacity: 0; pointer-events: none; -webkit-transition: opacity 0.15s; transition: opacity 0.15s; }
+.search-open #search { opacity: 1; pointer-events: auto; }
+.search-open #home { opacity: 0; }
+.sbg { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; background: -webkit-linear-gradient(top, #F5F5F7, #E2E2E7); background: linear-gradient(#F5F5F7, #E2E2E7); }
+.night .sbg { background: -webkit-linear-gradient(top, #1C1C1E, #0B0B0D); background: linear-gradient(#1C1C1E, #0B0B0D); }
+.magico { position: absolute; left: 16px; top: 14px; width: 40px; height: 40px; }
+.magico .mc { position: absolute; left: 3px; top: 3px; width: 24px; height: 24px; border: 5px solid currentColor; border-radius: 17px; box-sizing: border-box; }
+.magico .mh { position: absolute; left: 21px; top: 26px; width: 16px; height: 5px; background: currentColor; border-radius: 3px; -webkit-transform-origin: 0 50%; transform-origin: 0 50%; -webkit-transform: rotate(45deg); transform: rotate(45deg); }
+.round .magico { color: inherit; }
+.sfield { position: absolute; left: 96px; top: 40px; width: 1180px; height: 96px; border-radius: 48px; overflow: hidden; }
+.sfield .magico { color: #1D1D1F; }
+.night .sfield .magico { color: #F5F5F7; }
+.sq { position: absolute; left: 100px; top: 0; width: 1050px; height: 96px; line-height: 96px; font-size: 52px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+.sq .ph { color: #55555A; font-weight: 500; font-size: 44px; }
+.night .sq .ph { color: #B8B8BE; }
+.caret { display: inline-block; width: 4px; height: 58px; margin-left: 4px; vertical-align: middle; background: currentColor; -webkit-animation: blink 1s steps(1) infinite; animation: blink 1s steps(1) infinite; }
+@-webkit-keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } }
+.lvl { display: inline-block; height: 60px; margin-left: 24px; vertical-align: middle; white-space: nowrap; }
+.lvl i { display: inline-block; width: 12px; height: 56px; margin-right: 10px; border-radius: 6px; background: currentColor; vertical-align: middle; -webkit-transform: scaleY(0.25); transform: scaleY(0.25); -webkit-animation: lvl 0.5s ease-in-out infinite alternate; animation: lvl 0.5s ease-in-out infinite alternate; }
+@-webkit-keyframes lvl { to { -webkit-transform: scaleY(1); } }
+@keyframes lvl { to { transform: scaleY(1); } }
+.smic { position: absolute; left: 1304px; top: 40px; width: 260px; height: 96px; border-radius: 48px; -webkit-transition: -webkit-transform 0.15s ease-out; transition: transform 0.15s ease-out; }
+.smic.focus { background: #FFF; color: #1D1D1F; -webkit-transform: scale(1.06); transform: scale(1.06); }
+.smic .ring { left: -9px; top: -9px; width: 250px; height: 86px; }
+.smic .mlab { position: absolute; left: 92px; top: 0; width: 160px; height: 96px; line-height: 96px; font-size: 32px; font-weight: 700; white-space: nowrap; }
+.mic { position: absolute; left: 30px; top: 24px; width: 40px; height: 48px; }
+.mic div { position: absolute; background: currentColor; box-sizing: border-box; }
+.mic .mb { left: 12px; top: 0; width: 16px; height: 28px; border-radius: 9px; }
+.mic .ma { left: 5px; top: 14px; width: 30px; height: 20px; background: none; border: 4px solid currentColor; border-top: 0; border-radius: 0 0 16px 16px; }
+.mic .ms { left: 18px; top: 33px; width: 4px; height: 8px; }
+.mic .mt { left: 11px; top: 42px; width: 18px; height: 4px; border-radius: 2px; }
+.skb { position: absolute; left: 96px; top: 196px; width: 560px; height: 650px; }
+.skey { position: absolute; height: 84px; border-radius: 20px; text-align: center; font-size: 42px; font-weight: 700; text-transform: uppercase; -webkit-transition: -webkit-transform 0.15s ease-out; transition: transform 0.15s ease-out; }
+.skey .ring { left: -9px; top: -9px; }
+.skey.focus { background: #FFF; color: #1D1D1F; -webkit-transform: scale(1.1); transform: scale(1.1); z-index: 3; }
+.sres { position: absolute; left: 720px; top: 190px; width: 1104px; height: 880px; }
+.sres .rlabel { width: 900px; }
+.snote { position: absolute; left: 0; height: 40px; line-height: 40px; width: 1000px; font-size: 30px; font-weight: 500; color: #3A3A3F; }
+.night .snote { color: #D8D8DC; }
+.sempty { position: absolute; left: 0; top: 0; width: 1100px; height: 80px; line-height: 80px; font-size: 56px; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; }
+.schip { position: absolute; height: 64px; border-radius: 32px; text-align: center; line-height: 64px; font-size: 30px; font-weight: 700; white-space: nowrap; -webkit-transition: -webkit-transform 0.15s ease-out; transition: transform 0.15s ease-out; }
+.schip .ring { left: -9px; top: -9px; width: auto; height: auto; }
+.schip.focus { background: #FFF; color: #1D1D1F; -webkit-transform: scale(1.06); transform: scale(1.06); z-index: 3; }
+.shero { position: absolute; left: 0; top: 0; width: 1104px; height: 340px; border-radius: 28px; background: #2C2C2E; color: #FFF; -webkit-transition: -webkit-transform 0.15s ease-out; transition: transform 0.15s ease-out; }
+.shero.focus { -webkit-transform: scale(1.03); transform: scale(1.03); z-index: 3; }
+.shero .shbg { position: absolute; left: 0; top: 0; width: 1104px; height: 340px; border-radius: 28px; overflow: hidden; }
+.shero .shbg .fb, .shero .shbg img { position: absolute; left: 0; top: 0; width: 1104px; height: 340px; }
+.shero .shshade { position: absolute; left: 0; top: 0; width: 1104px; height: 340px; border-radius: 28px; background: -webkit-linear-gradient(left, rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.82) 45%, rgba(0, 0, 0, 0.25)); background: linear-gradient(to right, rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.82) 45%, rgba(0, 0, 0, 0.25)); }
+.shero .shtag { position: absolute; left: 40px; top: 22px; height: 40px; line-height: 40px; padding: 0 18px; border-radius: 20px; background: #FFF; color: #1D1D1F; font-size: 26px; font-weight: 800; }
+.shero .shtt { position: absolute; left: 40px; top: 70px; width: 900px; height: 64px; line-height: 64px; font-size: 54px; font-weight: 700; letter-spacing: -0.03em; }
+.shero .shmeta { position: absolute; left: 40px; top: 136px; width: 900px; height: 36px; line-height: 36px; font-size: 28px; font-weight: 600; color: #F0F0F2; }
+.shero .shov { position: absolute; left: 40px; top: 182px; width: 760px; height: 80px; line-height: 40px; font-size: 28px; color: #FFF; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.sbadges { position: absolute; left: 40px; top: 274px; height: 56px; white-space: nowrap; font-size: 0; }
+.shero .badge.inst { background: #FFF; color: #1D1D1F; }
+.shero .badge.inst .sym { -webkit-filter: brightness(0); filter: brightness(0); }
+.shero .ring { left: -9px; top: -9px; width: 1092px; height: 328px; }
+.sclip { position: absolute; left: -40px; width: 1240px; height: 300px; overflow: hidden; }
+.sstrip { position: absolute; left: 0; top: 0; width: 3600px; height: 300px; -webkit-transition: -webkit-transform 0.2s ease-out; transition: transform 0.2s ease-out; }
+.sstrip .card { top: 16px; }
+.sres .tile { width: 196px; height: 126px; }
+.ovb #search { position: absolute; }
+.lvl { vertical-align: top; margin-top: 18px; }
+.lvl i { vertical-align: top; margin-top: 0; }
