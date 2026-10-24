@@ -83,8 +83,20 @@ final class Catalog {
         if (!on && c != null) c.cancel();
     }
 
+    /** A short SHA-256 of the key, so the saved stamp doesn't carry anything of it. */
+    private static long keyDigest() {
+        try {
+            byte[] h = java.security.MessageDigest.getInstance("SHA-256").digest(Config.TMDB_KEY.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            long v = 0;
+            for (int i = 0; i < 8; i++) v = (v << 8) | (h[i] & 0xFF);
+            return v;
+        } catch (java.security.NoSuchAlgorithmException e) {
+            return 0;
+        }
+    }
+
     private long sourceStamp() {
-        long s = Tmdb.REGION.hashCode() * 31L + Config.TMDB_KEY.hashCode();
+        long s = Tmdb.REGION.hashCode() * 31L + keyDigest();
         s = s * 31L + (Config.HIDE_ANIMATION ? 1 : 0);
         return s * 31L + Services.installedStamp(context);
     }
@@ -382,12 +394,23 @@ final class Catalog {
 
     /** The app set changed (installed or removed): flags and the order of the providers are worked out again. */
     void recheckInstalled() {
-        long now = Services.installedStamp(context);
-        if (now == installedStamp) return;
-        installedStamp = now;
-        movies = recheck(movies);
-        shows = recheck(shows);
+        if (rechecking) return;
+        rechecking = true;
+        Work.io(() -> {   // package lookups: never on the main thread
+            try {
+                long now = Services.installedStamp(context);
+                if (now == installedStamp) return;
+                installedStamp = now;
+                movies = recheck(movies);
+                shows = recheck(shows);
+                notifyRows();
+            } finally {
+                rechecking = false;
+            }
+        });
     }
+
+    private volatile boolean rechecking;
 
     private volatile long installedStamp;
 

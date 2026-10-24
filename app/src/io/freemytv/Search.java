@@ -52,11 +52,13 @@ final class Search {
         if (running != null) running.cancel();
         final Net.Cancel cancel = running = new Net.Cancel();
         if (text.length() < 2 || !Tmdb.hasKey()) {
-            Result r = new Result();
-            r.query = text;
-            r.apps = apps(app, text);
-            r.failed = !Tmdb.hasKey() && text.length() >= 2;
-            Work.MAIN.post(() -> { if (current(mine)) cb.onResult(r); });
+            Work.io(() -> {   // the package list is read off the main thread
+                Result r = new Result();
+                r.query = text;
+                r.apps = apps(app, text);
+                r.failed = !Tmdb.hasKey() && text.length() >= 2;
+                Work.MAIN.post(() -> { if (current(mine)) cb.onResult(r); });
+            });
             return;
         }
         Work.io(() -> {
@@ -144,6 +146,12 @@ final class Search {
 
     private static List<String[]> launchable;
     private static long launchableAt;
+
+    /** Reads the installed apps in the background so the first letters typed answer from the cache. */
+    static void warm(Context c) {
+        final Context app = c.getApplicationContext();
+        Work.io(() -> installedApps(app));
+    }
 
     /** Installed apps whose name matches (case and accent insensitive, word prefix or substring, one typo from 4 letters). */
     static List<AppMatch> apps(Context c, String q) {

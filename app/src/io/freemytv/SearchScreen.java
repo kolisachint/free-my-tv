@@ -106,6 +106,7 @@ final class SearchScreen {
 
     void open(List<String> trendingTitles) {
         open = true;
+        Search.warm(home.context());
         trending = trendingTitles;
         query = "";
         shown = "";
