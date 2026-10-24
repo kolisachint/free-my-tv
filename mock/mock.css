@@ -127,7 +127,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .fbt { position: absolute; left: 20px; right: 20px; top: 50%; margin-top: -40px; height: 80px; line-height: 40px; text-align: center; font-size: 32px; font-weight: 700; color: #FFF; overflow: hidden; }
 .card .ringhost { position: absolute; left: 0; top: 0; -webkit-transition: -webkit-transform 0.15s ease-out; transition: transform 0.15s ease-out; }
 .card .ring { left: -9px; top: -9px; border-radius: 28px; }
-.card.focus .img, .card.focus .ringhost { -webkit-transform: scale(1.08); transform: scale(1.08); }
+.card.focus .img, .card.focus .ringhost { -webkit-transform: scale(1.05); transform: scale(1.05); }   /* 1.05 + ring stays inside the 28 px gap between cards */
 .card.focus { z-index: 3; }
 .card .t { position: absolute; left: 0; top: 0; height: 34px; line-height: 34px; font-size: 28px; font-weight: 700; }
 .card .m { position: absolute; left: 0; top: 0; height: 30px; line-height: 30px; font-size: 24px; font-weight: 500; color: #55555A; }
@@ -324,9 +324,12 @@ html.ovmode, body.ovmode { overflow-y: auto; overflow-x: hidden; height: auto; }
 .shero .badge.inst { background: #FFF; color: #1D1D1F; }
 .shero .badge.inst .sym { -webkit-filter: brightness(0); filter: brightness(0); }
 .shero .ring { left: -9px; top: -9px; width: 1092px; height: 328px; }
-.sclip { position: absolute; left: -40px; width: 1240px; height: 300px; overflow: hidden; }
-.sstrip { position: absolute; left: 0; top: 0; width: 3600px; height: 300px; -webkit-transition: -webkit-transform 0.2s ease-out; transition: transform 0.2s ease-out; }
-.sstrip .card { top: 16px; }
+/* vertical result list */
+.sclip { position: absolute; left: -16px; top: 0; width: 1136px; height: 880px; overflow: hidden; }
+.sstrip { position: absolute; left: 0; top: 0; width: 1136px; height: 4000px; -webkit-transition: -webkit-transform 0.15s ease-out; transition: transform 0.15s ease-out; }
+.sstrip .shero { position: absolute; }
+.scount { position: absolute; left: 860px; top: -54px; width: 244px; height: 44px; line-height: 44px; text-align: right; font-size: 32px; font-weight: 700; }
+.shero.sapp .shtag { background: rgba(255, 255, 255, 0.95); }
 .sres .tile { width: 196px; height: 126px; }
 .ovb #search { position: absolute; }
 .lvl { vertical-align: top; margin-top: 18px; }

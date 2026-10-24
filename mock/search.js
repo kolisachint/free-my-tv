@@ -5,7 +5,7 @@
  */
 var SQ = '', SRES = null, MIC = false, micT = 0, debT = 0, micN = 0, sBuilt = false;
 var SF = { a: 'kb', kr: 0, kc: 0, rr: 0, ri: 0 };
-var SKEYS = [], SRROWS = [], micEl = null, fieldEl = null;
+var SLIST = null, SKEYS = [], SRROWS = [], micEl = null, fieldEl = null;
 var TRENDING = ['Panchayat', 'Spider-Man', 'RRR', 'Scam 1992', 'Mirzapur', 'Netflix'];
 var MIC_PHRASES = ['spider man', 'panchayat', 'rrr'];
 
@@ -118,6 +118,7 @@ function renderField() {
 }
 function typeKey(v) {
   if (MIC) cancelMic();
+  if (SF.a === 'res') SF.a = 'kb';
   if (v === 'del') SQ = SQ.slice(0, -1); else if (v === 'clear') SQ = ''; else if (SQ.length < 40) SQ += v;
   renderField();
   clearTimeout(debT);
@@ -133,6 +134,7 @@ function startMic() {
   MIC = true; clearTimeout(debT); renderField();
   micT = setTimeout(function () {
     MIC = false; SQ = MIC_PHRASES[micN++ % MIC_PHRASES.length];
+    SF.a = 'res'; SF.rr = 0; SF.ri = 0;
     renderField(); runSearch(); saveRecent(SQ);
   }, 1500);
 }
@@ -163,7 +165,7 @@ function instChips(it) {
 }
 function renderSearch() {
   var R = $('sRes'), q = norm(SQ), y = 0, i;
-  R.innerHTML = ''; SRROWS = [];
+  R.innerHTML = ''; SRROWS = []; SLIST = null;
   if (q.length < 2) {
     if (q.length === 1) { E('div', 'snote', R, 'Type 2 or more letters to search.', 'top:0px'); y = 60; }
     E('div', 'rlabel', R, 'Recent searches', 'left:0;top:' + y + 'px');
@@ -178,54 +180,40 @@ function renderSearch() {
     E('div', 'rlabel', R, 'Trending', 'left:0;top:190px');
     chipRows(R, TRENDING, 254, pickQuery);
   } else if (SRES) {
-    var t = SRES.titles;
-    if (t.length) {
-      var it = t[0], hero = E('div', 'shero', R);
-      var bg = E('div', 'shbg', hero); pic(bg, it.bg, it.name);
-      E('div', 'shshade', hero);
-      E('div', 'shtag', hero, 'Best match \u00B7 ' + (it.seasons ? 'Show' : 'Movie'));
-      E('div', 'shtt clip1', hero, it.name);
-      E('div', 'shmeta clip1', hero, metaLine(it));
-      E('div', 'shov', hero, it.overview);
-      var bd = E('div', 'sbadges', hero);
-      instChips(it).forEach(function (n) { var b = E('span', 'badge inst', bd, n); sym(b, 'check'); });
-      ring(hero, 1104, 340, 36);
-      var open1 = function () { saveRecent(SQ); openDetails(null, null, it); };
-      hero.onclick = function () { SF.a = 'res'; SF.rr = 0; SF.ri = 0; applyFocus(); open1(); };
-      SRROWS.push({ els: [hero], acts: [open1] });
-      y = 356;
-      if (t.length > 1) {
-        E('div', 'rlabel', R, 'Movies & shows', 'left:0;top:' + y + 'px');
-        var clip = E('div', 'sclip', R, null, 'top:' + (y + 48) + 'px'), strip = E('div', 'sstrip', clip), row = { els: [], acts: [], strip: strip, pitch: 324 };
-        t.slice(1).forEach(function (m, i2) {
-          var c = E('div', 'card', strip, null, 'left:' + (40 + i2 * 324) + 'px;top:16px;width:300px');
-          var im = E('div', 'img', c, null, 'width:300px;height:169px');
-          pic(im, m.bg.replace('/medium/', '/small/'), m.name);
-          ring(E('div', 'ringhost', c, null, 'width:300px;height:169px'), 300, 169, 28);
-          E('div', 't clip1', c, m.name, 'top:191px;width:300px');
-          E('div', 'm clip1', c, m.year + ' \u00B7 ' + (m.seasons ? 'Show' : 'Movie'), 'top:229px;width:300px');
-          var act = function () { saveRecent(SQ); openDetails(null, null, m); };
-          c.onclick = function () { SF.a = 'res'; SF.rr = SRROWS.indexOf(row); SF.ri = i2; applyFocus(); act(); };
-          row.els.push(c); row.acts.push(act);
-        });
-        SRROWS.push(row);
-        y += 320;
+    var t = SRES.titles, list = [], TH = 340, GAP = 32, ay = 12;
+    t.forEach(function (it) { list.push({ it: it }); });
+    SRES.apps.forEach(function (a) { var o = { app: a }; if (t.length) list.push(o); else list.unshift(o); });
+    var clip = E('div', 'sclip', R), strip = E('div', 'sstrip', clip);
+    SLIST = { strip: strip, tiles: [] };
+    E('div', 'scount', R, '', 'display:none').id = 'sCount';
+    list.forEach(function (x, n) {
+      var label = n === 0 ? 'Best match' : x.app ? 'App' : x.it.seasons ? 'Show' : 'Movie', h = x.app ? 120 : TH, el, act;
+      el = E('div', 'shero' + (x.app ? ' sapp' : ''), strip, null, 'left:16px;top:' + ay + 'px;height:' + h + 'px');
+      if (x.app) {
+        el.style.background = x.app.bg;
+        E('div', 'shtag', el, label + (n === 0 ? '' : ''), 'top:40px;left:36px');
+        E('div', 'shtt clip1', el, x.app.name, 'top:30px;left:260px;height:60px;line-height:60px');
+        E('div', 'shmeta clip1', el, 'Open app', 'top:30px;left:700px;width:360px;text-align:right;line-height:60px;height:60px;font-size:30px');
+        ring(el, 1104, 120, 36);
+        act = function () { toast('Opening ' + x.app.name); };
+      } else {
+        var it = x.it, bg = E('div', 'shbg img', el); holder(bg, it.bg, it.name);
+        E('div', 'shshade', el);
+        E('div', 'shtag', el, label + (n === 0 ? ' \u00B7 ' + (it.seasons ? 'Show' : 'Movie') : ''));
+        E('div', 'shtt clip1', el, it.name);
+        E('div', 'shmeta clip1', el, metaLine(it));
+        E('div', 'shov', el, it.overview);
+        var bd = E('div', 'sbadges', el);
+        instChips(it).forEach(function (nm) { var b = E('span', 'badge inst', bd, nm); sym(b, 'check'); });
+        ring(el, 1104, 340, 36);
+        act = function () { saveRecent(SQ); openDetails(null, null, it); };
       }
-    }
-    if (SRES.apps.length) {
-      E('div', 'rlabel', R, 'Apps', 'left:0;top:' + y + 'px');
-      var arow = { els: [], acts: [] };
-      SRES.apps.forEach(function (a, i3) {
-        var tl = E('div', 'tile', R, null, 'left:' + (i3 * 220 + 14) + 'px;top:' + (y + 64) + 'px;background:' + a.bg);
-        tl.setAttribute('data-dark', a.name === 'Apple TV' ? '1' : '0');
-        E('div', 'nm', tl, a.name, a.name.length > 9 ? 'font-size:25px' : '');
-        ring(tl, 196, 126, 30);
-        var act = function () { saveRecent(SQ); toast('Opening ' + a.name); };
-        tl.onclick = function () { SF.a = 'res'; SF.rr = SRROWS.indexOf(arow); SF.ri = i3; applyFocus(); act(); };
-        arow.els.push(tl); arow.acts.push(act);
-      });
-      SRROWS.push(arow);
-    }
+      var row = { els: [el], acts: [act] };
+      el.onclick = function () { SF.a = 'res'; SF.rr = SRROWS.indexOf(row); SF.ri = 0; applyFocus(); act(); };
+      SRROWS.push(row);
+      SLIST.tiles.push({ el: el, y: ay, h: h });
+      ay += h + GAP;
+    });
   }
   if (SF.a === 'res') { if (!SRROWS.length) SF.a = 'kb'; else { SF.rr = Math.min(SF.rr, SRROWS.length - 1); SF.ri = Math.min(SF.ri, SRROWS[SF.rr].els.length - 1); } }
   applyFocus();
@@ -241,9 +229,20 @@ function applyFocus() {
   else if (SF.a === 'kb') { var k = kbAt(SF.kr, SF.kc); el = k && k.el; }
   else if (SRROWS[SF.rr]) {
     var r = SRROWS[SF.rr]; el = r.els[SF.ri];
-    if (r.strip) { var tx = -Math.max(0, SF.ri - 2) * r.pitch; r.strip.style.webkitTransform = r.strip.style.transform = 'translateX(' + tx + 'px)'; }
   }
   if (el) el.classList.add('focus');
+  if (SLIST) listScroll();
+}
+/* vertical result list: keep the focused tile fully in view (translateY), count "2 / 9", load images near focus only */
+function listScroll() {
+  var f = SF.a === 'res' ? SF.rr : 0, t = SLIST.tiles, cur = t[f], ty = 0, n = t.length, i;
+  var top = cur.y - 12, bot = cur.y + cur.h + 24;
+  ty = -Math.max(0, f === 0 ? 0 : Math.min(top, bot - 860));
+  if (SLIST.ty != null && SF.a !== 'res') ty = SLIST.ty;
+  SLIST.ty = ty;
+  SLIST.strip.style.webkitTransform = SLIST.strip.style.transform = 'translateY(' + ty + 'px)';
+  for (i = 0; i < n; i++) if (t[i].el.querySelector('.img')) cardPic(t[i].el, Math.abs(i - f) <= 2);
+  var c = $('sCount'); c.style.display = SF.a === 'res' ? 'block' : 'none'; c.textContent = (f + 1) + ' / ' + n;
 }
 function searchMove(dx, dy) {
   var f = SF, k, n;

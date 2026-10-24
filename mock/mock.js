@@ -144,6 +144,7 @@ function getLaunches() {
 }
 function putLaunches(l) { try { localStorage.setItem(REC_KEY, JSON.stringify(l)); } catch (e) {} }
 function recordLaunch(it, app) {
+  if (!it || !it.id || !it.name || !findItem(it.id)) return;   // titles only: apps never enter the history
   var l = getLaunches().filter(function (x) { return x.id !== it.id; });
   l.unshift({ id: it.id, kind: it.seasons ? 'show' : 'movie', title: it.name, app: app, at: Date.now() });
   putLaunches(l.slice(0, 20));
@@ -324,15 +325,15 @@ function openDetails(r, c, direct) {
   var app = x.cont ? 'Stremio' : x.launch ? x.launch.app : firstInstalled(it);
   var wl = x.cont ? 'Resume S' + x.cont.season + ' E' + x.cont.ep + ' in Stremio' : 'Watch in ' + app;
   var w2 = Math.round(wl.length * 15.5 + 64);
-  var b1 = E('div', 'btn sec', P, 'Play trailer', 'left:392px;width:320px'); ring(b1, 320, 78, 48);
+  var yt = it.trailer || null, b1 = E('div', 'btn sec', P, yt ? 'Play trailer' : 'Find trailer', 'left:392px;width:320px'); ring(b1, 320, 78, 48);
   var b2 = E('div', 'btn', P, wl, 'left:732px;width:' + w2 + 'px'); ring(b2, w2, 84, 51);
-  E('div', null, P, 'Play trailer opens YouTube.').id = 'sNote';
+  E('div', null, P, yt ? 'Trailer: youtube.com/watch?v=' + yt : 'No trailer id in Cinemeta. Falls back to a YouTube search.').id = 'sNote';
   E('div', null, P, 'Where-to-watch data: JustWatch via TMDB').id = 'sFoot';
   var W = E('div', 'glass', P); W.id = 'sWays';
   E('div', 'hd', W, 'Ways to watch');
   var det = S.det;
   det.els = [b1, b2]; det.acts = [
-    function () { toast('Opens YouTube to play the trailer (mock): ' + it.name); },
+    function () { toast(yt ? 'Opening trailer on YouTube (youtube.com/watch?v=' + yt + ')' : 'Searching YouTube for \u2018' + it.name + ' trailer\u2019'); },
     function () { toast('Opens ' + app + (x.cont ? ' at S' + x.cont.season + ' E' + x.cont.ep : '') + ' (mock)'); if (!x.cont) recordLaunch(it, app); }
   ];
   b1.onclick = function () { detFocus(0); detAct(); }; b2.onclick = function () { detFocus(1); detAct(); };

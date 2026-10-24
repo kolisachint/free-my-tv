@@ -64,7 +64,7 @@ Down from the Apps shelf opens the drawer. Up from its first row closes it.
 20b. **Hint strip**: bottom-right key list (H hides).
 21. **Overview mode**: the labelled all-in-one page.
 22. **Day/night + low-RAM switches**.
-23. **Component: Search** (`search.js`): full-screen sheet; query field (52 px) with caret + mic chip; on-screen TV keyboard (a-z, 0-9, Space, Delete, Clear) plus real typing; results after 2+ letters with 300 ms debounce; best match as a big hero card, a "Movies & shows" row and an "Apps" row; empty state "No results for ‘xyz’. Try a shorter word."; before typing: Recent searches (localStorage `fmtv_recent`, max 5) and Trending chips. Matching is case/accent-insensitive, word-prefix + substring, 1-edit typo for words of 4+ letters, over title (primary), cast and genre (secondary) and installed app names. About 15 search-only titles (`EXTRA` in `data.js`, Cinemeta data; providers FAKE) include Indian ones. Enter on a title opens the details sheet and Back returns to the search with focus kept; Enter on an app toasts "Opening Netflix"; Back from search returns to the Search button.
+23. **Component: Search** (`search.js`): full-screen sheet; query field (52 px) with caret + mic chip; on-screen TV keyboard (a-z, 0-9, Space, Delete, Clear) plus real typing; results after 2+ letters with 300 ms debounce; best match as a vertical list of tiles (every result looks like the best-match card: backdrop, title, meta, 2-line overview, installed chips + Stremio; list scrolls, counter "2 / 9"; app matches are compact tiles at the end); after a mic search focus lands on result 1; empty state "No results for ‘xyz’. Try a shorter word."; before typing: Recent searches (localStorage `fmtv_recent`, max 5) and Trending chips. Matching is case/accent-insensitive, word-prefix + substring, 1-edit typo for words of 4+ letters, over title (primary), cast and genre (secondary) and installed app names. About 15 search-only titles (`EXTRA` in `data.js`, Cinemeta data; providers FAKE) include Indian ones. Enter on a title opens the details sheet and Back returns to the search with focus kept; Enter on an app toasts "Opening Netflix"; Back from search returns to the Search button.
 
 ## Performance plan (the default profile; target Sony BRAVIA, Android 12, 2.85 GB RAM, ~80 MB free, Mali-G52, 1920x1080)
 
@@ -80,3 +80,15 @@ Down from the Apps shelf opens the drawer. Up from its first row closes it.
 
 Providers, prices and Stremio progress and the seeded launch history are invented (see `data.js`). Titles, overviews, casts and
 images are real (Cinemeta). Images come from metahub, not TMDB w780/w1280 (no TMDB key needed).
+
+## Trailer source
+
+The mock embeds a real YouTube id per title (`trailer` in `data.js`, from Cinemeta `trailerStreams[].ytId`; `null` when none: the button then reads "Find trailer"). The Android build will use TMDB `/movie/{id}/videos` (type=Trailer, site=YouTube, prefer official, language en), fall back to Cinemeta trailers, then a YouTube search intent.
+
+## Continue history
+
+Only titles are recorded in `mock.recent` (Watch / a way to watch in the details sheet). Opening an app from the shelf or a search app tile never is.
+
+## Focus spacing
+
+Focused cards scale 1.05; with the focus ring this stays inside the gap between cards (28 px in Continue, 32 px in Movies / Shows), so a focused card never covers its neighbour.
