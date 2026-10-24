@@ -65,6 +65,8 @@
     ['netflix', /^netflix$/, /netflix/i, ['#0A0A0A', '#000000']],
     ['youtube', /youtube/, /^youtube$/i, ['#1C1C1E', '#09090A']],
     ['prime', /^amazon$/, /prime video|amazon/i, ['#2AA8FF', '#0A68D4']],
+    ['stremio', /stremio/, /stremio/i, ['#6A5AE0', '#2B2366']],
+    ['justwatch', /justwatch/, /justwatch/i, ['#FFC526', '#B57E00']],
     ['disney', /disney/, /disney/i, ['#173584', '#08143F']],
     ['max', /hbo|wbd/, /^(hbo )?max$|hbo max/i, ['#5C30E8', '#221684']],
     ['appletv', /appletv|apple\.tv/, /apple tv/i, ['#1C1C1E', '#000000']],
@@ -388,6 +390,8 @@
       card.style.width = rects[c][1] + 'px';
       var img = el('div', 'img', card);
       img.style.backgroundImage = 'url(' + Data.image(p.backdrop, c === 0 ? 'w1280' : 'w780') + ')';
+      var badge = p.via === 'stremio' ? 'Stremio' : p.service;   // where OK goes: the provider's app, or Stremio
+      if (badge) el('div', 'badge', img, badge);
       el('div', 'name', card, p.title);
       if (c === 0 && p.meta) el('div', 'meta', card, p.meta);
       hover(card, Z.CARDS, c);
@@ -837,6 +841,7 @@
 
   function launcher(id, name) {
     return function () {
+      if (MOCKUP) { mockupApp(id, name || id); return; }
       TV.launch(id, null, function (ok) {
         if (!ok) toast(trf("Couldn't open {app}.", {app: name || id}));
       });
@@ -864,6 +869,7 @@
         return;
       case Z.CARDS:
         var p = cards[st.card], app = p && Data.appFor(p.app);
+        if (MOCKUP) { mockupOpen(p, app); return; }
         if (app) launcher(app.id, app.title)();
         return;
       case Z.SHELF:
@@ -975,6 +981,31 @@
   }
 
   // MARK: - Toast
+
+  /** ?mockup in the URL: say where a pick would open instead of opening it. */
+  var MOCKUP = /[?&]mockup\b/.test(location.search);
+
+  function mockupOpen(p, app) {
+    if (!p) return;
+    if (p.via === 'stremio') {
+      toast('Opening "' + p.title + '" in Stremio...');
+      open('https://app.strem.io/', '_blank');   // the real build opens the title itself, by its id
+    } else if (app && p.search) {
+      toast('Opening "' + p.title + '" in ' + app.title + '...');
+      open(p.search, '_blank');
+    } else if (app) {
+      toast('Mockup: "' + p.title + '" would open in ' + app.title + '.');
+    } else {
+      toast('Mockup: "' + p.title + '" has nowhere to open.');
+    }
+  }
+
+  /** ?mockup in the URL: the Stremio and JustWatch tiles open their sites. */
+  function mockupApp(id, title) {
+    if (/stremio/i.test(id + ' ' + title)) { toast('Opening Stremio...'); open('https://www.stremio.com/', '_blank'); }
+    else if (/justwatch/i.test(id + ' ' + title)) { toast('Opening JustWatch...'); open('https://www.justwatch.com/in', '_blank'); }
+    else toast('Mockup: "' + title + '" would open.');
+  }
 
   var toastTimer = 0;
   function toast(text) {

@@ -282,8 +282,28 @@ var Data = (function () {
     return (cut > 0 ? t.slice(0, cut) : t).replace(/^\s+|\s+$/g, '');
   }
 
+  /** ?mockup in the URL: three Indian picks showing the design (provider app first, Stremio fallback). */
+  function mockup() {
+    try { return /[?&]mockup\b/.test(location.search); } catch (e) { return false; }
+  }
+
+  function mockupPicks(kind) {
+    var all = [
+      {id: 96677, kind: 'tv', title: 'Lupin', backdrop: '/aY7zv2pfk9H0QxaaL3PBjvalbKQ.jpg',
+        meta: 'Series · Crime · Netflix', app: 'netflix', service: 'Netflix',
+        search: 'https://www.netflix.com/search?q=Lupin'},
+      {id: 101352, kind: 'tv', title: 'Panchayat', backdrop: '/iZ8EtGAqKWZdRJPzWfFseNfVxjh.jpg',
+        meta: 'Series · Comedy · Prime Video', app: 'prime', service: 'Prime Video',
+        search: 'https://www.primevideo.com/search/ref=atv_nb_sr?phrase=Panchayat'},
+      {id: 111188, kind: 'tv', title: 'Scam 1992', backdrop: '/tTYP1npvBU90NthceezScfXGiOl.jpg',
+        meta: 'Series · Crime · Sony LIV', app: null, service: 'Sony LIV', via: 'stremio'}
+    ];
+    return all.filter(function (p) { return kind === null || kind === p.kind; });
+  }
+
   /** This hour's 3 picks: movies ("movie"), shows ("tv") or both (null). */
   function now(kind) {
+    if (mockup()) return mockupPicks(kind);   // ?mockup: fixed sample picks, no TMDB key needed
     var list = [];
     if (!KEY) return list;
     for (var i = 0; i < picks.length; i++) {

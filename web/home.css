@@ -263,6 +263,19 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   font-weight: 500;
   color: #6E6E73;
 }
+.card .badge {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  padding: 8px 18px 9px;
+  border-radius: 999px;
+  background: rgba(20, 20, 24, 0.72);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.night .card .badge { background: rgba(0, 0, 0, 0.6); }
 .night .card .img { background-color: #2C2C2E; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32); }
 .night .card .name { color: #F5F5F7; }
 .night .card .meta { color: rgba(245, 245, 247, 0.62); }
