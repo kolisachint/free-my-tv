@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="mock.css">
 </head>
-<body>
-<div id="stage">
+<body tabindex="-1">
+<div id="stage" tabindex="-1">
   <div id="sky"><div class="grad day"></div><div class="grad night"></div><div id="lift"></div></div>
 
   <div id="home" class="layer">
@@ -25,8 +25,9 @@
   <div id="scrim" class="layer"></div>
   <div id="sheet" class="layer"></div>
   <div id="toast"></div>
-  <div id="hud"></div>
+  <div id="hint"><b>Keys</b> ←↑→↓ move · Enter open · Back/Esc/right-click back · N night · R low-RAM · O overview · H hide this · wheel scrolls</div>
 </div>
+<div id="ov" style="display:none"></div>
 <script src="data.js"></script>
 <script src="mock.js"></script>
 </body>

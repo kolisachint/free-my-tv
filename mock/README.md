@@ -20,13 +20,17 @@ Images load from the internet (metahub, Cinemeta). Offline, cards show a gradien
 | Enter | Open details (cards) / toast (everything else) |
 | Backspace or Esc | Back (closes details, then drawer) |
 | N | Day / night |
+| O | Overview: whole home on one scrolling page, each part labelled "Component: ..." (O or Esc leaves) |
+| H | Hide / show the key hint strip (bottom right) |
+| Mouse wheel | Down / up one row (throttled); shift+wheel or sideways wheel = left / right |
+| Hover / click / right-click | Hover focuses, click = Enter, right-click = Back |
 | R | Low-RAM profile on / off (reloads the page with `?lowram`) |
 
 Down from the Apps shelf opens the drawer. Up from its first row closes it.
 
 ## URL flags (for screenshots)
 
-`?night` `?drawer` `?nocontinue` (Continue row hidden, focus starts on Movies)
+`?overview` `?night` `?drawer` `?nocontinue` (Continue row hidden, focus starts on Movies)
 `?lowram` (planned low-RAM profile: Movies 8, Shows 8, smaller card images, no shadows, instant hero swap, counters show 8)
  `?details=movie:2` `?details=show:3` `?details=cont:0`
 `?focus=movie:5` `?focus=apps:2` (combine with `&`).
@@ -52,7 +56,9 @@ Down from the Apps shelf opens the drawer. Up from its first row closes it.
 17. **Ways to watch panel**: Stream / Rent / Buy groups, "Installed" / "Not installed" labels, "via Stremio" last.
 18. **Footnote**: "Where-to-watch data: JustWatch via TMDB".
 19. **Toast**: bottom pill for every fake action.
-20. **Day/night + low-RAM switches**.
+20. **Hint strip**: bottom-right key list (H hides).
+21. **Overview mode**: the labelled all-in-one page.
+22. **Day/night + low-RAM switches**.
 
 ## Fake
 

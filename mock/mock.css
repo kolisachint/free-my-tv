@@ -240,3 +240,22 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .sym { object-fit: contain; }
 
 .lowram .hslide, .lowram .htext { -webkit-transition: none; transition: none; }
+
+/* MARK: - Hint strip */
+#hint { position: absolute; right: 24px; bottom: 14px; height: 40px; line-height: 40px; padding: 0 22px; border-radius: 20px; background: rgba(29, 29, 31, 0.88); color: #FFF; font-size: 22px; font-weight: 600; white-space: nowrap; z-index: 20; pointer-events: none; }
+#hint b { margin-right: 10px; }
+#hint.off { display: none; }
+body, #stage { outline: none; }
+
+/* MARK: - Overview (O): normal page scroll, 1920px content scaled to the window width */
+html.ovmode, body.ovmode { overflow-y: auto; overflow-x: hidden; height: auto; }
+#ov { position: relative; width: 100%; background: #E2E2E7; }
+#ov.night { background: #0B0B0D; color: #F5F5F7; }
+.ovwrap { position: absolute; left: 0; top: 0; width: 1920px; -webkit-transform-origin: 0 0; transform-origin: 0 0; background: #F0F0F3; }
+#ov.night .ovwrap { background: #161618; }
+.ovh { position: relative; height: 56px; line-height: 56px; padding-left: 96px; font-size: 30px; font-weight: 800; background: #1D1D1F; color: #FFF; letter-spacing: 0.01em; }
+#ov.night .ovh { background: #F5F5F7; color: #1D1D1F; }
+.ovb { position: relative; width: 1920px; overflow: hidden; }
+.ovdr { position: absolute; left: 0; top: 0; width: 1920px; height: 560px; overflow: hidden; }
+.ovb .row { position: absolute; left: 0; top: 0; opacity: 1 !important; }
+.ovb .rcount { display: none; }
