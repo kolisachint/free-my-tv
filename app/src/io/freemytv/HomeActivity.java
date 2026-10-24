@@ -69,6 +69,19 @@ public class HomeActivity extends Activity {
     @Override public void onTrimMemory(int level) {
         super.onTrimMemory(level);
         if (level >= TRIM_MEMORY_COMPLETE) Recs.get(this).trim();
+        if (level >= TRIM_MEMORY_RUNNING_LOW) {
+            Images.trim();
+            if (home != null) home.trimMemory(level);
+        }
+    }
+
+    /** The speech recognizer's answer (the mic key or the search screen's mic chip). */
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != HomeView.REQ_VOICE || home == null) return;
+        java.util.ArrayList<String> said = resultCode == RESULT_OK && data != null
+                ? data.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS) : null;
+        home.onVoice(said == null || said.isEmpty() ? null : said.get(0));
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {

@@ -103,14 +103,6 @@ final class Prefs {
 
     static void setLanguage(String v) { put("language", v); Ui.applyLanguage(); }
 
-    /** "auto", "C" or "F". */
-    static String temperature() {
-        String v = sp().getString("temperature", Config.TEMPERATURE).trim().toUpperCase(Locale.ROOT);
-        return v.startsWith("F") ? "F" : v.startsWith("C") ? "C" : "auto";
-    }
-
-    static void setTemperature(String v) { put("temperature", v); }
-
     /** "auto" (dark from sunset to sunrise), "light" or "dark". */
     static String theme() {
         String v = sp().getString("theme", "auto");
@@ -134,20 +126,31 @@ final class Prefs {
     static boolean sounds() { return sp().getBoolean("sounds", true); }
     static void setSounds(boolean on) { put("sounds", on); }
 
-    // MARK: - Widgets and coins
-
-    static boolean weather() { return sp().getBoolean("weather", true); }
-    static void setWeather(boolean on) { put("weather", on); }
-
-    static boolean quotes() { return sp().getBoolean("quotes", Config.SHOW_CRYPTO); }
-    static void setQuotes(boolean on) { put("quotes", on); }
+    // MARK: - Photos
 
     /** Your photos (Photos, sent from a computer) on the screensaver and behind the home screen, once imported. */
     static boolean photos() { return sp().getBoolean("photos", true); }
     static void setPhotos(boolean on) { put("photos", on); }
 
-    static boolean coin(int i) { return sp().getBoolean("coin" + i, true); }
-    static void setCoin(int i, boolean on) { put("coin" + i, on); }
+    // MARK: - Recent searches (the home's search screen): the last 5, newest first. No `version` bump: nothing redraws for it.
+
+    static List<String> recentSearches() {
+        List<String> out = new ArrayList<>();
+        if (app == null) return out;
+        for (String q : sp().getString("recentSearches", "").split("\n")) if (!q.isEmpty()) out.add(q);
+        return out;
+    }
+
+    static void addRecentSearch(String q) {
+        q = q == null ? "" : q.replaceAll("\\s+", " ").trim();
+        if (q.length() < 2 || app == null) return;
+        List<String> list = recentSearches();
+        for (int i = list.size() - 1; i >= 0; i--) if (list.get(i).equalsIgnoreCase(q)) list.remove(i);
+        list.add(0, q);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < Math.min(5, list.size()); i++) sb.append(i == 0 ? "" : "\n").append(list.get(i));
+        sp().edit().putString("recentSearches", sb.toString()).apply();
+    }
 
     // MARK: - Shelf
 

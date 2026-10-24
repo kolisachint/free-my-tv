@@ -24,10 +24,12 @@ final class Shadows {
     private final float[] xs = new float[4], ys = new float[4];
     private final int[] sx = new int[4], sy = new int[4];
     boolean dither;
+    /** Always the cached nine-slice (the new home draws every shadow this way, on any Android). */
+    boolean always;
 
     /** Draws `shape` (radius `r`) with `paint`, whose BlurMaskFilter was made with radius `blur`. */
     void draw(Canvas c, RectF shape, float r, float blur, Paint paint) {
-        if (!Ui.LEGACY) {
+        if (!Ui.LEGACY && !always) {
             c.drawRoundRect(shape, r, r, paint);
             return;
         }
