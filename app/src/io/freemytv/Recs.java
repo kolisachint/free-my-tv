@@ -54,8 +54,8 @@ final class Recs {
     interface Listener { void onRecs(); }
 
     private static final String API = "https://api.themoviedb.org/3";
-    /** The backdrops: on a 720p UI, TMDB's 1280-wide copy shows the same and is lighter to download and decode. */
-    private static final String IMAGES = "https://image.tmdb.org/t/p/" + (Backdrop.W <= 1280 ? "w1280" : "original");
+    /** The backdrops: TMDB's 1280-wide copy (never "original": it costs download, disk and decoding for nothing). */
+    private static final String IMAGES = "https://image.tmdb.org/t/p/w1280";
     /** TMDB's Animation genre (movies and shows: cartoons and anime), left out with hide_animation=true. */
     private static final int ANIMATION = 16;
     private static final long LIST_EVERY = 6 * 3600_000L;
@@ -326,7 +326,7 @@ final class Recs {
         return out;
     }
 
-    /** The pick's original image if it's already on disk (the screensaver loads it in its own way), or null. */
+    /** The pick's image (w1280) if it's already on disk (the screensaver loads it in its own way), or null. */
     File readyImage(Pick p) {
         return hasImage(p) ? imageFile(p) : null;
     }
@@ -710,7 +710,7 @@ final class Recs {
         return key.isEmpty() ? null : key;
     }
 
-    // MARK: - Images (TMDB originals on disk, up to 24 so the whole list fits; this hour's kept ready in memory)
+    // MARK: - Images (TMDB w1280 on disk, up to 24 so the whole list fits; this hour's kept ready in memory)
 
     private void download(Pick p) throws IOException {
         File f = imageFile(p);

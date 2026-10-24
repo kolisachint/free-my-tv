@@ -106,25 +106,4 @@ final class Symbols {
         RECT.set(cx - fw / 2, cy - fh / 2, cx + fw / 2, cy + fh / 2);
         canvas.drawBitmap(s, null, RECT, PAINT);
     }
-
-    /** Every symbol weather() returns, warmed at `pointSize` (the card shows whichever the forecast brings). */
-    static void warmWeather(Context c, float pointSize) {
-        for (String name : new String[] {"sunny", "clear_night", "partly_cloudy_day", "partly_cloudy_night", "cloud",
-                "foggy", "rainy", "snowflake", "thunderstorm"}) {
-            warm(c, name, pointSize);
-        }
-    }
-
-    /** Weather symbol for an Open-Meteo WMO weather code. */
-    static String weather(int code, boolean day) {
-        if (code <= 1) return day ? "sunny" : "clear_night";
-        if (code == 2) return day ? "partly_cloudy_day" : "partly_cloudy_night";
-        if (code == 3) return "cloud";
-        if (code == 45 || code == 48) return "foggy";
-        if (code >= 51 && code <= 57) return "rainy";
-        if (code == 65 || code == 67 || code == 82) return "rainy";
-        if (code >= 71 && code <= 77 || code == 85 || code == 86) return "snowflake";
-        if (code >= 95) return "thunderstorm";
-        return "rainy";
-    }
 }

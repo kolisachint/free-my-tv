@@ -24,7 +24,7 @@ before you do it, and let them do the taps on the TV.
    - Linux: OpenJDK 17, Android's command-line tools and adb from the package manager, then the same `sdkmanager` line.
    - Windows: Git Bash (what Claude Code runs there; `build.sh` handles it) or WSL, then as on Linux.
 3. **Settings:** run `./build.sh` once; it creates `config.properties`. Fill in `latitude` and `longitude` (decimal
-   degrees) and `city` for their city, `tmdb_region` (two-letter country), `show_crypto`, `currency` and `temperature` to match.
+   degrees) and `city` for their city (the sunset darkens the home screen) and `tmdb_region` (two-letter country) to match.
 4. **The TMDB key is theirs and secret.** Ask them to create one (free: themoviedb.org → Settings → API) and paste it
    after `tmdb_key=` in `config.properties` themselves. Don't ask for it in the chat, never print it, never commit
    it. If they paste it in the chat anyway, put it only in `config.properties`.

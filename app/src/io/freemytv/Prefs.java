@@ -103,14 +103,6 @@ final class Prefs {
 
     static void setLanguage(String v) { put("language", v); Ui.applyLanguage(); }
 
-    /** "auto", "C" or "F". */
-    static String temperature() {
-        String v = sp().getString("temperature", Config.TEMPERATURE).trim().toUpperCase(Locale.ROOT);
-        return v.startsWith("F") ? "F" : v.startsWith("C") ? "C" : "auto";
-    }
-
-    static void setTemperature(String v) { put("temperature", v); }
-
     /** "auto" (dark from sunset to sunrise), "light" or "dark". */
     static String theme() {
         String v = sp().getString("theme", "auto");
@@ -134,20 +126,11 @@ final class Prefs {
     static boolean sounds() { return sp().getBoolean("sounds", true); }
     static void setSounds(boolean on) { put("sounds", on); }
 
-    // MARK: - Widgets and coins
-
-    static boolean weather() { return sp().getBoolean("weather", true); }
-    static void setWeather(boolean on) { put("weather", on); }
-
-    static boolean quotes() { return sp().getBoolean("quotes", Config.SHOW_CRYPTO); }
-    static void setQuotes(boolean on) { put("quotes", on); }
+    // MARK: - Photos
 
     /** Your photos (Photos, sent from a computer) on the screensaver and behind the home screen, once imported. */
     static boolean photos() { return sp().getBoolean("photos", true); }
     static void setPhotos(boolean on) { put("photos", on); }
-
-    static boolean coin(int i) { return sp().getBoolean("coin" + i, true); }
-    static void setCoin(int i, boolean on) { put("coin" + i, on); }
 
     // MARK: - Shelf
 

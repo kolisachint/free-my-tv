@@ -39,7 +39,6 @@ number() {
 LAT="$(number latitude 40.7128)"
 LON="$(number longitude -74.0060)"
 ASSIST=false; [ "$(prop disable_assistant false)" = "true" ] && ASSIST=true
-CRYPTO=false; [ "$(prop show_crypto true)" = "true" ] && CRYPTO=true
 ANIMATION=false; [ "$(prop hide_animation false)" = "true" ] && ANIMATION=true
 
 rm -rf out && mkdir -p out/gen/io/freemytv out/classes
@@ -52,16 +51,14 @@ final class Config {
 
     static final String TMDB_KEY = "$(prop tmdb_key '')";
     static final String WATCHMODE_KEY = "$(prop watchmode_key '')";
+    static final String STREMIO_AUTH_KEY = "$(prop stremio_auth_key '')";
     static final String TMDB_REGION = "$(prop tmdb_region US)";
     static final String LATITUDE = "$LAT";
     static final String LONGITUDE = "$LON";
     static final String CITY = "$(prop city '')";
     static final String LANGUAGE = "$(prop language auto)";
-    static final String CURRENCY = "$(prop currency USD)";
-    static final String TEMPERATURE = "$(prop temperature auto)";
     static final String HIDE_SERVICES = "$(prop hide_services '')";
     static final boolean DISABLE_ASSISTANT = $ASSIST;
-    static final boolean SHOW_CRYPTO = $CRYPTO;
     static final boolean HIDE_ANIMATION = $ANIMATION;
 }
 EOF
