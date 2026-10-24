@@ -325,8 +325,8 @@ html.ovmode, body.ovmode { overflow-y: auto; overflow-x: hidden; height: auto; }
 .shero .badge.inst .sym { -webkit-filter: brightness(0); filter: brightness(0); }
 .shero .ring { left: -9px; top: -9px; width: 1092px; height: 328px; }
 /* vertical result list */
-.sclip { position: absolute; left: -16px; top: 0; width: 1136px; height: 880px; overflow: hidden; }
-.sstrip { position: absolute; left: 0; top: 0; width: 1136px; height: 4000px; -webkit-transition: -webkit-transform 0.15s ease-out; transition: transform 0.15s ease-out; }
+.sclip { position: absolute; left: -40px; top: 0; width: 1184px; height: 880px; overflow: hidden; }
+.sstrip { position: absolute; left: 0; top: 0; width: 1184px; height: 4000px; -webkit-transition: -webkit-transform 0.15s ease-out; transition: transform 0.15s ease-out; }
 .sstrip .shero { position: absolute; }
 .scount { position: absolute; left: 860px; top: -54px; width: 244px; height: 44px; line-height: 44px; text-align: right; font-size: 32px; font-weight: 700; }
 .shero.sapp .shtag { background: rgba(255, 255, 255, 0.95); }

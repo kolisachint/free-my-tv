@@ -188,7 +188,7 @@ function renderSearch() {
     E('div', 'scount', R, '', 'display:none').id = 'sCount';
     list.forEach(function (x, n) {
       var label = n === 0 ? 'Best match' : x.app ? 'App' : x.it.seasons ? 'Show' : 'Movie', h = x.app ? 120 : TH, el, act;
-      el = E('div', 'shero' + (x.app ? ' sapp' : ''), strip, null, 'left:16px;top:' + ay + 'px;height:' + h + 'px');
+      el = E('div', 'shero' + (x.app ? ' sapp' : ''), strip, null, 'left:40px;top:' + ay + 'px;height:' + h + 'px');
       if (x.app) {
         el.style.background = x.app.bg;
         E('div', 'shtag', el, label + (n === 0 ? '' : ''), 'top:40px;left:36px');
