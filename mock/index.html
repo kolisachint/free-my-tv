@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Free My TV: home mock</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="mock.css">
+</head>
+<body tabindex="-1">
+<div id="stage" tabindex="-1">
+  <div id="sky"><div class="grad day"></div><div class="grad night"></div><div id="lift"></div></div>
+
+  <div id="home" class="layer">
+    <div id="hero" class="layer">
+      <div class="hslide" id="hs0"></div>
+      <div class="hslide" id="hs1"></div>
+      <div class="htext" id="ht0"></div>
+      <div class="htext" id="ht1"></div>
+    </div>
+    <div id="topbar"></div>
+    <div id="rowsClip"><div id="rows"></div></div>
+  </div>
+
+  <div id="drawer" class="layer"></div>
+  <div id="search" class="layer"></div>
+  <div id="scrim" class="layer"></div>
+  <div id="sheet" class="layer"></div>
+  <div id="toast"></div>
+  <div id="dbg" style="display:none"></div>
+  <div id="hint"><b>Keys</b> ←↑→↓ move · Enter open · Back/Esc/right-click back · N night · R no shadows · S search · W wifi · M mic · O overview · D debug · H hide this · wheel scrolls</div>
+</div>
+<div id="ov" style="display:none"></div>
+<script src="data.js"></script>
+<script src="mock.js"></script>
+<script src="search.js"></script>
+</body>
+</html>
