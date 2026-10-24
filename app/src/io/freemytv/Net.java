@@ -17,6 +17,8 @@ import java.util.zip.GZIPInputStream;
 final class Net {
     private Net() {}
 
+    private static final java.util.concurrent.atomic.AtomicInteger PART_ID = new java.util.concurrent.atomic.AtomicInteger();
+
     static final class HttpError extends IOException {
         final int code;
 
@@ -81,7 +83,7 @@ final class Net {
     /** Downloads to `dest` (through a .part file renamed at the end). */
     static void download(String url, File dest, Cancel cancel) throws IOException {
         HttpURLConnection c = open(url, null, cancel);
-        File part = new File(dest.getPath() + ".part");
+        File part = new File(dest.getPath() + "." + PART_ID.incrementAndGet() + ".part");   // ours alone
         try (InputStream in = stream(c); OutputStream out = new FileOutputStream(part)) {
             if (c.getResponseCode() != 200) throw new HttpError(c.getResponseCode(), "image server");
             copy(in, out);
@@ -94,13 +96,16 @@ final class Net {
             c.disconnect();
         }
         if (!part.renameTo(dest)) {
+            boolean there = dest.exists() && dest.length() > 0;   // another download won the race
             //noinspection ResultOfMethodCallIgnored
             part.delete();
+            if (there) return;
             throw new IOException("couldn't save the file");
         }
     }
 
     private static HttpURLConnection open(String url, String body, Cancel cancel, String... headers) throws IOException {
+        String firstHost = new URL(url).getHost();
         for (int hops = 0; hops < 5; hops++) {
             HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
             if (cancel != null) cancel.add(c);
@@ -111,7 +116,8 @@ final class Net {
                 c.setRequestProperty("Accept-Encoding", "gzip");
                 c.setRequestProperty("Accept", "application/json, image/*");
                 c.setRequestProperty("User-Agent", "FreeMyTV");
-                for (int i = 0; i + 1 < headers.length; i += 2) c.setRequestProperty(headers[i], headers[i + 1]);
+                boolean sameHost = firstHost.equalsIgnoreCase(new URL(url).getHost());   // never send Authorization elsewhere
+                for (int i = 0; sameHost && i + 1 < headers.length; i += 2) c.setRequestProperty(headers[i], headers[i + 1]);
                 if (body != null) {
                     c.setRequestMethod("POST");
                     c.setDoOutput(true);

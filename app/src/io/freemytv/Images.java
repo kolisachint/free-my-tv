@@ -184,11 +184,29 @@ final class Images {
 
     // MARK: - Loading
 
+    private static final Map<String, Object> LOCKS = new HashMap<>();
+
     private static Bitmap load(Request r) throws IOException {
         File f = new File(dir(), name(r.url));
-        if (!f.exists() || f.length() == 0) {
-            r.net = new Net.Cancel();
-            Net.download(r.url, f, r.net);
+        Object lock;
+        synchronized (LOCKS) {
+            lock = LOCKS.get(r.url);
+            if (lock == null) LOCKS.put(r.url, lock = new Object());
+        }
+        boolean fetched = false;
+        synchronized (lock) {   // one download per URL; the other sizes wait, then decode the file
+            try {
+                if (!f.exists() || f.length() == 0) {
+                    if (r.cancelled) return null;
+                    r.net = new Net.Cancel();
+                    Net.download(r.url, f, r.net);
+                    fetched = true;
+                }
+            } finally {
+                synchronized (LOCKS) { LOCKS.remove(r.url); }
+            }
+        }
+        if (fetched) {
             if (r.cancelled) return null;
             prune();
         } else {
