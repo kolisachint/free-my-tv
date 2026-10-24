@@ -82,9 +82,15 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .round .sym { left: 18px; top: 18px; width: 32px; height: 32px; }
 .round .ring { left: -9px; top: -9px; width: 56px; height: 56px; border-radius: 43px; }
 .round.focus { background: #FFF; color: #1D1D1F; -webkit-transform: scale(1.1); transform: scale(1.1); }
-.round .tip { position: absolute; top: 84px; right: -4px; width: 300px; text-align: right; font-size: 26px; font-weight: 600; white-space: nowrap; opacity: 0; }
-.round.focus .tip { opacity: 1; }
-.night .round.focus .tip { color: #F5F5F7; }
+.round .tip { position: absolute; top: 76px; left: -28px; width: 124px; height: 32px; line-height: 32px; text-align: center; font-size: 22px; font-weight: 700; color: #1D1D1F; background: rgba(255, 255, 255, 0.82); border-radius: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.night .round .tip { color: #F5F5F7; background: rgba(0, 0, 0, 0.55); }
+.round.focus .tip { background: #FFF; color: #1D1D1F; }
+.wifi { position: absolute; left: 17px; top: 17px; width: 34px; height: 34px; }
+.wifi .wb { position: absolute; bottom: 3px; width: 6px; border-radius: 2px; background: currentColor; opacity: 0.3; }
+.wifi .wb.on { opacity: 1; }
+.wifi .wb:nth-child(1) { left: 2px; height: 8px; } .wifi .wb:nth-child(2) { left: 10px; height: 14px; } .wifi .wb:nth-child(3) { left: 18px; height: 20px; } .wifi .wb:nth-child(4) { left: 26px; height: 26px; }
+.wifi .wslash { display: none; position: absolute; left: -4px; top: 14px; width: 42px; height: 5px; border-radius: 3px; background: currentColor; box-shadow: 0 0 0 2px #FFF; -webkit-transform: rotate(-45deg); transform: rotate(-45deg); }
+.night .wifi .wslash { box-shadow: 0 0 0 2px #1D1D1F; }
 
 /* MARK: - Hero: backdrop fades into the page; text on the plain page */
 #hero { z-index: 0; }
@@ -325,7 +331,7 @@ html.ovmode, body.ovmode { overflow-y: auto; overflow-x: hidden; height: auto; }
 .shero .badge.inst .sym { -webkit-filter: brightness(0); filter: brightness(0); }
 .shero .ring { left: -9px; top: -9px; width: 1092px; height: 328px; }
 /* vertical result list */
-.sclip { position: absolute; left: -40px; top: 0; width: 1184px; height: 880px; overflow: hidden; }
+.sclip { position: absolute; left: -40px; top: 0; width: 1184px; height: 800px; overflow: hidden; }
 .sstrip { position: absolute; left: 0; top: 0; width: 1184px; height: 4000px; -webkit-transition: -webkit-transform 0.15s ease-out; transition: transform 0.15s ease-out; }
 .sstrip .shero { position: absolute; }
 .scount { position: absolute; left: 860px; top: -54px; width: 244px; height: 44px; line-height: 44px; text-align: right; font-size: 32px; font-weight: 700; }

@@ -109,16 +109,32 @@ function buildTop() {
   var tb = $('topbar');
   E('div', null, tb).id = 'clockT';
   E('div', null, tb).id = 'clockD';
-  var defs = [['search', 'Search'], ['live_tv', 'Live TV'], ['hdmi', 'HDMI Inputs'], ['settings', 'Settings']];
+  var defs = [['search', 'Search'], ['hdmi', 'Inputs'], ['wifi', ''], ['settings', 'Settings']];
   defs.forEach(function (d, i) {
-    var b = E('div', 'round glass', tb, null, 'left:' + (1480 + i * 92) + 'px');
-    if (d[0] === 'search') magIcon(b); else sym(b, d[0]);
-    E('div', 'tip', b, d[1]);
+    var b = E('div', 'round glass', tb, null, 'left:' + (1324 + i * 144) + 'px');
+    if (d[0] === 'search') magIcon(b); else if (d[0] === 'wifi') wifiIcon(b); else sym(b, d[0]);
+    E('div', 'tip clip1', b, d[1]);
     ring(b, 68, 68, 43);
-    b.onclick = function () { setFocus('top', i); if (i === 0) openSearch(); else toast(d[1] + ' (mock)'); };
+    b.onclick = function () { setFocus('top', i); topAct(i); };
     topEls.push(b);
   });
+  setWifi(!!FLAGS.offline);
   tick(); setInterval(tick, 20000);
+}
+/* Wi-Fi: 4 signal bars (3 lit) drawn in CSS; offline = faint bars + slash, and the label says "No internet" */
+var WIFI = { name: 'Home-5G', bars: 3, off: false };
+function wifiIcon(parent) { var w = E('div', 'wifi', parent); for (var i = 0; i < 4; i++) E('i', 'wb', w); E('b', 'wslash', w); }
+function setWifi(off) {
+  WIFI.off = off;
+  var b = topEls[2]; if (!b) return;
+  var bars = b.querySelectorAll('.wb'), i;
+  for (i = 0; i < 4; i++) bars[i].className = 'wb' + (!off && i < WIFI.bars ? ' on' : '');
+  b.querySelector('.wslash').style.display = off ? 'block' : 'none';
+  b.querySelector('.tip').textContent = off ? 'No internet' : WIFI.name;
+}
+function topAct(i) {
+  if (i === 0) { openSearch(); return; }
+  toast(['', 'HDMI Inputs (mock)', WIFI.off ? 'Opening Wi-Fi settings (no internet)' : 'Opening Wi-Fi settings', 'Settings (mock)'][i]);
 }
 function magIcon(parent) { var m = E('div', 'magico', parent); E('div', 'mc', m); E('div', 'mh', m); return m; }
 function tick() {
@@ -384,7 +400,7 @@ function activate() {
     else if (d.items[c].cont) toast('Resuming in Stremio');
     else openDetails(S.row, c);
   } else if (S.zone === 'search') searchAct();
-  else if (S.zone === 'top') { if (S.top === 0) openSearch(); else toast(['', 'Live TV', 'HDMI Inputs', 'Settings'][S.top] + ' (mock)'); }
+  else if (S.zone === 'top') topAct(S.top);
   else if (S.zone === 'drawer') {
     var t = drawerEls[S.dr][S.dc];
     toast(t.className.indexOf('off') >= 0 ? t.firstChild.nextSibling.textContent + ' has no signal' : t.childNodes[1].textContent + ' (mock)');
@@ -445,6 +461,7 @@ function onKey(e) {
   else if (k === 'o' || k === 'O') enterOverview();
   else if ((k === 's' || k === 'S' || k === '/') && (S.zone === 'rows' || S.zone === 'top')) openSearch();
   else if ((k === 'm' || k === 'M') && (S.zone === 'rows' || S.zone === 'top')) { openSearch(); startMic(); }
+  else if (k === 'w' || k === 'W') { setWifi(!WIFI.off); toast(WIFI.off ? 'Wi-Fi: no internet' : 'Wi-Fi: connected to ' + WIFI.name); }
   else if (k === 'h' || k === 'H') $('hint').classList.toggle('off');
   else used = false;
   if (used) e.preventDefault();
@@ -536,7 +553,7 @@ function buildOverview() {
   var wrap = E('div', 'ovwrap', box), y = 0;
   var nm = [rows[1].items.length, rows[2].items.length];
   var heroItem = rows[1].items[0].item;
-  sec(wrap, 'Top bar (clock + 4 round buttons: Search, Live TV, HDMI Inputs, Settings)', 150, function (b) { var c = $('topbar').cloneNode(true); c.removeAttribute('id'); stripFocus(c); b.appendChild(c); });
+  sec(wrap, 'Top bar (clock + 4 round buttons: Search \u00B7 Inputs \u00B7 Wi-Fi \u00B7 Settings, each with a label under it)', 150, function (b) { var c = $('topbar').cloneNode(true); c.removeAttribute('id'); stripFocus(c); b.appendChild(c); });
   sec(wrap, 'Hero (follows focus: backdrop, title, meta, overview, installed-app badges)', 600, function (b) {
     var hs = E('div', 'hslide on', b), ht = E('div', 'htext on', b);
     fillHero(hs, ht, heroItem);

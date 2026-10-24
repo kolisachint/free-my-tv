@@ -26,6 +26,7 @@ Images load from the internet (metahub, Cinemeta). Offline, cards show a gradien
 | Hover / click / right-click | Hover focuses, click = Enter, right-click = Back |
 | R | No shadows at all on / off |
 | D | Debug overlay (bottom-left, above the hint strip): images loaded, estimated decoded MB, last frame ms |
+| W | Wi-Fi connected / disconnected |
 | S or / | Search (letters type inside it; Backspace deletes, Back when empty) |
 | M | Simulated remote mic: "Listening…" ~1.5 s, then a sample phrase is searched |
 
@@ -33,7 +34,7 @@ Down from the Apps shelf opens the drawer. Up from its first row closes it.
 
 ## URL flags (for screenshots)
 
-`?overview` `?night` `?drawer` `?nocontinue` (Continue row hidden, focus starts on Movies) `?norecent` (clears the saved launch history; the Continue row then shows only Stremio items)
+`?overview` `?night` `?drawer` `?offline` (Wi-Fi shows "No internet") `?nocontinue` (Continue row hidden, focus starts on Movies) `?norecent` (clears the saved launch history; the Continue row then shows only Stremio items)
 `?search` `?search=spider` `?search=xyzq` `?mic` (open Search, with a query, with no results, or already listening)
 `?lowram` (lighter variant of the default: no shadows at all; same as key R) `?debug` (debug overlay, same as key D)
  `?details=movie:2` `?details=show:3` `?details=cont:0`
@@ -44,7 +45,7 @@ Down from the Apps shelf opens the drawer. Up from its first row closes it.
 1. **Stage**: fixed 1920x1080, scaled by transform.
 2. **Page background**: day/night vertical gradient.
 3. **Clock**: time + short date, top left.
-4. **Round glass buttons** (4): Search (first), Live TV, HDMI Inputs, Settings; name shown on focus.
+4. **Round glass buttons** (4): Search, Inputs (HDMI), Wi-Fi, Settings, each with an always-visible label under it (22 px, ellipsis). Wi-Fi draws 4 signal bars (3 lit) and the network name ("Home-5G"); disconnected = faint bars with a slash and the label "No internet" (`?offline`, key W toggles). Live TV is only in the drawer's Inputs row.
 5. **Hero backdrop**: focused item's image, masked to fade into the page; crossfades.
 6. **Hero text**: title, meta line, 2-line overview.
 7. **Where-to-watch badges**: installed apps only (check icon), Stremio last. `INSTALLED` in `data.js` drives shelf, chips and details sheet.

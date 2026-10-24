@@ -237,7 +237,7 @@ function applyFocus() {
 function listScroll() {
   var f = SF.a === 'res' ? SF.rr : 0, t = SLIST.tiles, cur = t[f], ty = 0, n = t.length, i;
   var top = cur.y - 12, bot = cur.y + cur.h + 24;
-  ty = -Math.max(0, f === 0 ? 0 : Math.min(top, bot - 860));
+  ty = -Math.max(0, f === 0 ? 0 : Math.min(top, bot - 790));
   if (SLIST.ty != null && SF.a !== 'res') ty = SLIST.ty;
   SLIST.ty = ty;
   SLIST.strip.style.webkitTransform = SLIST.strip.style.transform = 'translateY(' + ty + 'px)';
