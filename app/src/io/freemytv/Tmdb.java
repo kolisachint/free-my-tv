@@ -160,7 +160,8 @@ final class Tmdb {
                 JSONObject p = list.optJSONObject(i);
                 if (p == null) continue;
                 String raw = p.optString("provider_name");
-                String[] s = Services.match(c, raw, p.optInt("provider_id"));
+                int id = p.optInt("provider_id");
+                String[] s = Services.match(c, raw, id);
                 Title.Provider pr = new Title.Provider();
                 pr.kind = kind;
                 pr.price = "";
@@ -169,15 +170,24 @@ final class Tmdb {
                     pr.pkg = s[2];
                     pr.name = Services.NAME.get(s[1]);
                 } else {
-                    pr.appKey = "";
+                    // A rent or buy store ("Amazon Video", "Apple TV Store", "YouTube"): its TMDB name, and the app that sells it.
+                    String[] store = Services.store(c, id);
+                    pr.appKey = store == null ? "" : store[1];
+                    pr.pkg = store == null ? null : store[2];
                     pr.name = raw.replaceAll(" (with Ads|Amazon Channel)$", "").trim();
                 }
+                // One line per app and kind: "Prime Video" and "Amazon Video" in the same group are one app.
                 boolean dup = false;
-                for (Title.Provider q : out) dup |= q.kind.equals(pr.kind) && q.name.equals(pr.name);
+                for (Title.Provider q : out) dup |= q.kind.equals(pr.kind) && sameApp(q).equals(sameApp(pr));
                 if (!dup && !pr.name.isEmpty()) out.add(pr);
             }
         }
         return out;
+    }
+
+    /** What a provider line is about: its app's key, or its name when we have no app for it. */
+    private static String sameApp(Title.Provider p) {
+        return p.appKey.isEmpty() ? "name:" + p.name : p.appKey;
     }
 
     /** Sets `installed` on every provider (and Stremio's flag stays as it is) and puts the installed ones first in each kind. */

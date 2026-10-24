@@ -39,6 +39,20 @@ final class Services {
         {"oneplay", "oneplay", "net.cme.voyo.cz.tvapp"},    // Czechia: Voyo and O2 TV became Oneplay, same app
     };
 
+    /**
+     * TMDB's rent and buy stores: provider id → the app that sells the title (key, package). Only for the Rent and Buy
+     * lines of the details sheet; never a "Watch on" chip (those read streaming providers only).
+     */
+    static final String[][] STORES = {
+        {"2", "appletv", "com.apple.atve.androidtv.appletv"},
+        {"2", "appletv", "com.apple.atve.sony.appletv"},
+        {"2", "appletv", "com.apple.atve.amazon.appletv"},
+        {"10", "prime", "com.amazon.amazonvideo.livingroom"},   // Amazon Video
+        {"10", "prime", "com.amazon.firebat"},
+        {"10", "prime", "com.amazon.avod"},
+        {"192", "youtube", YOUTUBE_PKG},                        // YouTube (rent or buy)
+    };
+
     static final Map<String, String> NAME = new HashMap<>();
     static {
         NAME.put("netflix", "Netflix");
@@ -55,6 +69,7 @@ final class Services {
         NAME.put("crunchyroll", "Crunchyroll");
         NAME.put("oneplay", "Oneplay");
         NAME.put(STREMIO, "Stremio");
+        NAME.put("youtube", "YouTube");
     }
 
     /** Services named in hide_services (config.properties), trimmed and lowercased: never a source of picks. */
@@ -70,6 +85,7 @@ final class Services {
     static boolean installed(Context c, String pkg) {
         if (!HIDDEN.isEmpty()) {
             for (String[] s : TABLE) if (s[2].equals(pkg) && HIDDEN.contains(s[1])) return false;
+            for (String[] s : STORES) if (s[2].equals(pkg) && HIDDEN.contains(s[1])) return false;
             if (pkg.equals(STREMIO_PKG) && HIDDEN.contains(STREMIO)) return false;
         }
         return HomeApps.launchIntent(c.getPackageManager(), pkg) != null;
@@ -95,6 +111,18 @@ final class Services {
         return first;
     }
 
+    /** The STORES row for a TMDB provider id: the one whose app is on the TV, else the first. Null for other ids. */
+    static String[] store(Context c, int providerId) {
+        String id = String.valueOf(providerId);
+        String[] first = null;
+        for (String[] s : STORES) {
+            if (!s[0].equals(id)) continue;
+            if (installed(c, s[2])) return s;
+            if (first == null) first = s;
+        }
+        return first;
+    }
+
     /** Key of the service for a package ("com.netflix.ninja" → "netflix"), or null. */
     static String keyOf(String pkg) {
         if (STREMIO_PKG.equals(pkg)) return STREMIO;
@@ -106,6 +134,7 @@ final class Services {
     static long installedStamp(Context c) {
         long stamp = 7;
         for (String[] s : TABLE) stamp = stamp * 31L + (installed(c, s[2]) ? s[2].hashCode() : 0);
+        for (String[] s : STORES) stamp = stamp * 31L + (installed(c, s[2]) ? s[2].hashCode() : 0);
         return stamp * 31L + (stremioInstalled(c) ? 1 : 0);
     }
 }

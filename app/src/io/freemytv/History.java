@@ -122,10 +122,12 @@ final class History {
         if (appKey.equals(Services.STREMIO)) return Services.STREMIO_PKG;
         Context c = Prefs.context();
         String first = "";
-        for (String[] s : Services.TABLE) {
-            if (!s[1].equals(appKey)) continue;
-            if (first.isEmpty()) first = s[2];
-            if (c != null && HomeApps.launchIntent(c.getPackageManager(), s[2]) != null) return s[2];
+        for (String[][] table : new String[][][] {Services.TABLE, Services.STORES}) {
+            for (String[] s : table) {
+                if (!s[1].equals(appKey)) continue;
+                if (first.isEmpty()) first = s[2];
+                if (c != null && HomeApps.launchIntent(c.getPackageManager(), s[2]) != null) return s[2];
+            }
         }
         return first;
     }

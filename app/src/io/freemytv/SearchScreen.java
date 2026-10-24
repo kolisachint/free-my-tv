@@ -291,7 +291,7 @@ final class SearchScreen {
         t.url = title.backdropUrl(1280);
         t.gradient = Fx.placeholder(title.title, TILE_W, TILE_H);
         List<String> seen = new ArrayList<>();
-        for (Title.Provider p : title.providers) if (p.installed && !"Stremio".equals(p.name) && !seen.contains(p.name) && seen.size() < 3) seen.add(p.name);
+        for (Title.Provider p : title.providers) if (p.installed && Title.Provider.STREAM.equals(p.kind) && !"Stremio".equals(p.name) && !seen.contains(p.name) && seen.size() < 3) seen.add(p.name);
         t.chips.addAll(seen);
         if (title.stremio) t.chips.add("Stremio");
         for (String n : t.chips) t.chipW.add(54 + fx.chip.measureText(n) + 22);
