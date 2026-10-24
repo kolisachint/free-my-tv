@@ -622,8 +622,8 @@ var SHOWS = [
  }
 ];
 
-// Installed on this TV (sample, owner is in India). One source of truth: shelf, hero chips and details sheet all use it.
-var INSTALLED = ['Netflix', 'YouTube', 'Prime Video', 'Disney+', 'JioHotstar', 'SonyLIV', 'Stremio'];
+// Installed on the owner's Sony BRAVIA (measured). One source of truth: shelf, hero chips and details sheet all use it.
+var INSTALLED = ['Netflix', 'YouTube', 'Prime Video', 'Apple TV', 'JioHotstar', 'Stremio'];  // the real TV; Disney+ and SonyLIV are NOT installed
 
 // FAKE: Continue in Stremio, two shows from SHOWS with invented progress.
 var CONTINUE = [
@@ -634,14 +634,14 @@ var CONTINUE = [
 // FAKE: app shelf. Brand colors only; the real shelf uses the TV's own icons. Only INSTALLED apps are shown.
 var ALL_APPS = [
   { name: 'Netflix', bg: '#B20710' }, { name: 'YouTube', bg: '#C4302B' },
-  { name: 'Prime Video', bg: '#00539C' }, { name: 'Disney+', bg: '#113CCF' },
-  { name: 'JioHotstar', bg: '#1F2A6B' }, { name: 'SonyLIV', bg: '#2B2B2B' },
-  { name: 'Stremio', bg: '#6A3FB5' }
+  { name: 'Prime Video', bg: '#00539C' }, { name: 'Apple TV', bg: '#1D1D1F' },
+  { name: 'JioHotstar', bg: '#1F2A6B' }, { name: 'Stremio', bg: '#6A3FB5' },
+  { name: 'Disney+', bg: '#113CCF' }, { name: 'SonyLIV', bg: '#2B2B2B' }
 ];
 var APPS = ALL_APPS.filter(function (a) { return INSTALLED.indexOf(a.name) >= 0; });
 
 // FAKE: providers per title, picked by a small deterministic hash. Real data: JustWatch via TMDB.
-var STREAMERS = ['Netflix', 'Prime Video', 'Disney+', 'JioHotstar', 'SonyLIV', 'Max', 'Apple TV+', 'Hulu', 'Paramount+'];
+var STREAMERS = ['Netflix', 'Prime Video', 'Disney+', 'JioHotstar', 'SonyLIV', 'Max', 'Apple TV', 'Hulu', 'Paramount+'];
 var STORES = ['YouTube', 'Apple TV', 'Prime Video', 'Google Play'];
 function hashStr(s) { var h = 7; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
 

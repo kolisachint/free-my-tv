@@ -24,14 +24,15 @@ Images load from the internet (metahub, Cinemeta). Offline, cards show a gradien
 | H | Hide / show the key hint strip (bottom right) |
 | Mouse wheel | Down / up one row (throttled); shift+wheel or sideways wheel = left / right |
 | Hover / click / right-click | Hover focuses, click = Enter, right-click = Back |
-| R | Low-RAM profile on / off (reloads the page with `?lowram`) |
+| R | No shadows at all on / off |
+| D | Debug overlay: images loaded, estimated decoded MB, last frame ms |
 
 Down from the Apps shelf opens the drawer. Up from its first row closes it.
 
 ## URL flags (for screenshots)
 
 `?overview` `?night` `?drawer` `?nocontinue` (Continue row hidden, focus starts on Movies)
-`?lowram` (planned low-RAM profile: Movies 8, Shows 8, smaller card images, no shadows, instant hero swap, counters show 8)
+`?lowram` (lighter variant of the default: no shadows at all; same as key R) `?debug` (debug overlay, same as key D)
  `?details=movie:2` `?details=show:3` `?details=cont:0`
 `?focus=movie:5` `?focus=apps:2` (combine with `&`).
 
@@ -50,15 +51,26 @@ Down from the Apps shelf opens the drawer. Up from its first row closes it.
 11. **Card fallback**: gradient + title when an image fails.
 12. **Focus treatment**: scale 1.08 + thick border + outer outline.
 13. **Row scroll**: vertical (translateY of rows) and horizontal (translateX of strip).
-14. **App shelf**: glass platter with brand-color tiles, installed apps only (7: Netflix, YouTube, Prime Video, Disney+, JioHotstar, SonyLIV, Stremio).
+14. **App shelf**: glass platter with brand-color tiles, installed apps only (6: Netflix, YouTube, Prime Video, Apple TV, JioHotstar, Stremio).
 15. **Drawer**: Inputs row (Live TV, HDMI 1-4, one "No signal" dashed + dimmed) and Shortcuts row.
 16. **Details sheet**: backdrop, poster, title, meta, overview, cast, two buttons.
 17. **Ways to watch panel**: Stream / Rent / Buy groups, "Installed" / "Not installed" labels, "via Stremio" last.
 18. **Footnote**: "Where-to-watch data: JustWatch via TMDB".
 19. **Toast**: bottom pill for every fake action.
-20. **Hint strip**: bottom-right key list (H hides).
+20. **Debug overlay** (D): top-left stats panel.
+20b. **Hint strip**: bottom-right key list (H hides).
 21. **Overview mode**: the labelled all-in-one page.
 22. **Day/night + low-RAM switches**.
+
+## Performance plan (the default profile; target Sony BRAVIA, Android 12, 2.85 GB RAM, ~80 MB free, Mali-G52, 1920x1080)
+
+- 15 Movies + 15 Shows.
+- Card images at small size (metahub `small`, about w300); hero and details backdrop at medium.
+- Windowed image loading: only cards in the focused row's visible window +-1 hold an image; the rows next to it keep 2; every other row is back to a gradient + title placeholder. The old hero image is dropped after the fade.
+- No large blurred shadows: one small soft shadow (`0 4px 12px`); `?lowram` / R removes shadows entirely.
+- Focus animation: transform only, 150 ms. Hero crossfade: opacity only, 150 ms.
+- Debug overlay (D) shows loaded images, estimated decoded memory (w x h x 4 at displayed size) and last frame time against the budget: <= 10 full images, <= 16 MB.
+- Installed apps match the real TV; Disney+ and SonyLIV show only as dimmed "Not installed" providers in the details sheet.
 
 ## Fake
 

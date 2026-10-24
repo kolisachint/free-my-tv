@@ -4,7 +4,7 @@
  */
 var FLAGS = {};
 location.search.replace(/^\?/, '').split('&').forEach(function (p) { if (p) { var a = p.split('='); FLAGS[a[0]] = a[1] || '1'; } });
-var LOW = !!FLAGS.lowram, NOCONT = !!FLAGS.nocontinue, FIRST = NOCONT ? 1 : 0;
+var NOCONT = !!FLAGS.nocontinue, FIRST = NOCONT ? 1 : 0;
 var $ = function (id) { return document.getElementById(id); };
 var stage = $('stage');
 var SYM = '../app/assets/symbols/';
@@ -29,6 +29,33 @@ function sym(parent, name) {
 function ring(parent, w, h, r, pad, bw) {
   pad = pad == null ? 9 : pad; bw = bw == null ? 6 : bw;
   return E('div', 'ring', parent, null, 'left:' + (-pad) + 'px;top:' + (-pad) + 'px;width:' + (w + 2 * pad - 2 * bw) + 'px;height:' + (h + 2 * pad - 2 * bw) + 'px;border-radius:' + r + 'px');
+}
+/* Windowed card image: only a gradient + title until updateWindow() asks for the real image (small size, w~300). */
+function holder(parent, url, title) {
+  var h = hashStr(title) % 360;
+  parent.setAttribute('data-src', url);
+  var fb = E('div', 'fb', parent, null, 'background:linear-gradient(135deg,hsl(' + h + ',45%,34%),hsl(' + ((h + 50) % 360) + ',50%,16%))');
+  E('div', 'fbt', fb, title);
+}
+function cardPic(card, on) {
+  var h = card.querySelector('.img'), im = h && h.querySelector('img');
+  if (!h || !h.getAttribute('data-src')) return;
+  if (on && !im) {
+    im = document.createElement('img');
+    im.onerror = function () { if (im.parentNode) im.parentNode.removeChild(im); };
+    im.src = h.getAttribute('data-src');
+    h.insertBefore(im, h.firstChild.nextSibling);
+  } else if (!on && im) { im.removeAttribute('src'); h.removeChild(im); }
+}
+/* Focused row: visible cards +-1; the rows next to it keep 2 cards; every other row is unloaded. */
+function updateWindow() {
+  rows.forEach(function (d, r) {
+    if (d.kind === 'apps') return;
+    var n = d.items.length, c = S.cols[r], lo = -1, hi = -1, dist = Math.abs(r - S.row);
+    if (dist === 0) { var first = Math.max(0, c - 1); lo = Math.max(0, first - 1); hi = Math.min(n - 1, first + 5); }
+    else if (dist === 1 && r >= FIRST) { lo = c; hi = Math.min(n - 1, c + 1); }
+    d.els.forEach(function (el, i) { cardPic(el, i >= lo && i <= hi); });
+  });
 }
 /* picture with a gradient + title fallback underneath; a broken image just removes itself */
 function pic(parent, url, title) {
@@ -97,8 +124,8 @@ function buildRows() {
   var cont = CONTINUE.map(function (c) { return { item: SHOWS[c.index], cont: c }; });
   var defs = [
     { title: 'Continue in Stremio', kind: 'cont', items: cont, w: 520, h: 293, pitch: 576 },
-    { title: 'Movies', kind: 'movie', items: MOVIES.slice(0, LOW ? 8 : 15).map(function (m) { return { item: m }; }), w: LOW ? 300 : 360, h: LOW ? 169 : 203, pitch: LOW ? 332 : 392 },
-    { title: 'Shows', kind: 'show', items: SHOWS.slice(0, LOW ? 8 : 15).map(function (m) { return { item: m }; }), w: LOW ? 300 : 360, h: LOW ? 169 : 203, pitch: LOW ? 332 : 392 },
+    { title: 'Movies', kind: 'movie', items: MOVIES.slice(0, 15).map(function (m) { return { item: m }; }), w: 360, h: 203, pitch: 392 },
+    { title: 'Shows', kind: 'show', items: SHOWS.slice(0, 15).map(function (m) { return { item: m }; }), w: 360, h: 203, pitch: 392 },
     { title: 'Apps', kind: 'apps', items: APPS.map(function (a) { return { app: a }; }) }
   ];
   defs.forEach(function (d, r) {
@@ -123,7 +150,7 @@ function buildRows() {
       d.items.forEach(function (x, i) {
         var c = E('div', 'card', d.strip, null, 'left:' + (96 + i * d.pitch) + 'px;width:' + d.w + 'px');
         var img = E('div', 'img', c, null, 'width:' + d.w + 'px;height:' + d.h + 'px');
-        pic(img, LOW ? x.item.bg.replace('/medium/', '/small/') : x.item.bg, x.item.name);
+        holder(img, x.item.bg.replace('/medium/', '/small/'), x.item.name);
         if (d.kind === 'cont') {
           E('div', 'shade', img);
           E('div', 'left', img, 'S' + x.cont.season + ' E' + x.cont.ep + ' \u00B7 ' + x.cont.minsLeft + ' min left');
@@ -152,6 +179,7 @@ function setHero(it, cont) {
   fillHero(hs, ht, it);
   hs.className = 'hslide on'; ht.className = 'htext on';
   $('hs' + old).className = 'hslide'; $('ht' + old).className = 'htext';
+  setTimeout(function () { if (S.heroSlot !== old) $('hs' + old).innerHTML = ''; }, 260);
 }
 function fillHero(hs, ht, it) {
   hs.innerHTML = ''; ht.innerHTML = '';
@@ -191,6 +219,7 @@ function setFocus(zone, a, b) {
     }
   }
   rows.forEach(function (d, i) { d.el.classList.toggle('above', i < S.row); });
+  updateWindow();
   var ty = 24 - ROW_TOPS[S.row];
   $('rows').style.webkitTransform = $('rows').style.transform = 'translateY(' + ty + 'px)';
 }
@@ -346,7 +375,8 @@ function onKey(e) {
   else if (k === 'Enter') activate();
   else if (k === 'Backspace' || k === 'Escape') back();
   else if (k === 'n' || k === 'N') { setNight(!S.night); toast(S.night ? 'Night look' : 'Day look'); }
-  else if (k === 'r' || k === 'R') { var q = location.search.replace(/[?&]lowram(=1)?/, '').replace(/^&/, '?'); location.search = LOW ? q : (q ? q + '&lowram' : '?lowram'); }
+  else if (k === 'r' || k === 'R') { setLow(!S.lowram); toast(S.lowram ? 'No shadows at all (lighter variant)' : 'Single soft shadow (default)'); }
+  else if (k === 'd' || k === 'D') toggleDebug();
   else if (k === 'o' || k === 'O') enterOverview();
   else if (k === 'h' || k === 'H') $('hint').classList.toggle('off');
   else used = false;
@@ -386,6 +416,23 @@ function grab() { try { window.focus(); document.body.focus(); } catch (x) {} }
 window.addEventListener('click', grab);
 window.addEventListener('load', grab);
 
+/* MARK: - Debug overlay: loaded images, estimated decoded memory, frame time */
+var dbgOn = false, lastFrame = 0, frameMs = 0;
+function toggleDebug() { dbgOn = !dbgOn; $('dbg').style.display = dbgOn ? 'block' : 'none'; if (dbgOn) dbgTick(); }
+function dbgStats() {
+  var l = stage.querySelectorAll('img'), n = 0, bytes = 0, i, im;
+  for (i = 0; i < l.length; i++) { im = l[i]; if (im.className === 'sym' || !im.complete || !im.naturalWidth) continue; n++; bytes += im.offsetWidth * im.offsetHeight * 4; }
+  return { n: n, mb: bytes / 1048576 };
+}
+function dbgTick() {
+  if (!dbgOn) return;
+  var st = dbgStats();
+  $('dbg').innerHTML = 'Images loaded: <b>' + st.n + '</b><br>Decoded memory (estimate): <b>' + st.mb.toFixed(1) + ' MB</b><br>Last frame: <b>' + frameMs.toFixed(1) + ' ms</b><br><small>target \u2264 10 full images, \u2264 16 MB</small>';
+  window.__dbg = st;
+  setTimeout(dbgTick, 300);
+}
+(function loop(t) { frameMs = t - lastFrame; lastFrame = t; requestAnimationFrame(loop); })(0);
+
 /* MARK: - Overview: the whole home as one tall page, every part visible, labelled by component */
 var OV = false;
 function sec(host, name, h, build) {
@@ -393,6 +440,10 @@ function sec(host, name, h, build) {
   var b = E('div', 'ovb', host, null, 'height:' + h + 'px');
   build(b);
   return b;
+}
+function loadClone(el) {
+  var l = el.querySelectorAll('.img[data-src]'), i, im;
+  for (i = 0; i < l.length; i++) if (!l[i].querySelector('img')) { im = document.createElement('img'); im.src = l[i].getAttribute('data-src'); l[i].insertBefore(im, l[i].firstChild.nextSibling); }
 }
 function stripFocus(el) {
   var f = el.querySelectorAll('.focus'), i;
@@ -403,7 +454,7 @@ function wrapCards(b, d, label) {
   var lb = E('div', 'rlabel', b, label); lb.style.top = '20px';
   var sc = 200 / d.w, pitch = 224, per = 8;
   d.els.forEach(function (c, i) {
-    var k = c.cloneNode(true); stripFocus(k);
+    var k = c.cloneNode(true); stripFocus(k); loadClone(k);
     var col = i % per, rw = Math.floor(i / per);
     k.style.left = (96 + col * pitch) + 'px'; k.style.top = (80 + rw * 210) + 'px';
     k.style.width = d.w + 'px';
@@ -424,7 +475,7 @@ function buildOverview() {
     fillHero(hs, ht, heroItem);
   });
   if (!NOCONT) sec(wrap, 'Continue in Stremio row (2, hidden when empty)', 470, function (b) {
-    var c = rows[0].el.cloneNode(true); stripFocus(c); c.style.top = '0px';
+    var c = rows[0].el.cloneNode(true); stripFocus(c); loadClone(c); c.style.top = '0px';
     c.querySelector('.strip').style.webkitTransform = c.querySelector('.strip').style.transform = 'none'; c.className = 'row'; b.appendChild(c);
   });
   sec(wrap, 'Movies row (' + nm[0] + ' cards, shown wrapped)', 80 + Math.ceil(nm[0] / 8) * 210 + 20, function (b) { wrapCards(b, rows[1], 'Movies'); });
@@ -437,7 +488,17 @@ function buildOverview() {
     var c = $('drawer').cloneNode(true); c.removeAttribute('id'); stripFocus(c); c.style.cssText = 'position:absolute;left:0;top:-420px;width:1920px;height:1080px';
     inner.appendChild(c);
   });
-  sec(wrap, 'Details sheet: open any card with Enter (not drawn here)', 90, function () {});
+  sec(wrap, 'Details sheet (one static example: Enter on any card)', 1080, function (b) {
+    var sz = S.zone, sd = S.det;
+    openDetails(1, 2);
+    var p = $('sheetPanel').cloneNode(true); stripFocus(p);
+    b.appendChild(p);
+    S.det = sd; S.zone = sz; stage.classList.remove('sheet-open'); $('sheet').innerHTML = '';
+  });
+  sec(wrap, 'State: Continue row hidden when Stremio has nothing in progress (?nocontinue)' + (NOCONT ? ' [active now]' : ''), 130, function (b) {
+    E('div', 'ovnote', b, 'With ?nocontinue the Continue in Stremio row is not built, the first focus lands on Movies, and Up from Movies goes to the top bar.');
+  });
+  sec(wrap, 'Debug overlay (D / ?debug): top-left panel, not drawn here', 90, function () {});
   sec(wrap, 'Hint strip + toast: bottom-right keys, bottom-centre pill (not drawn here)', 90, function () {});
   var total = 0, i, kids = wrap.children;
   for (i = 0; i < kids.length; i++) total += kids[i].offsetHeight;
@@ -483,7 +544,8 @@ buildTop(); buildRows(); buildDrawer(); fit();
 (function flags() {
   var f = FLAGS;
   if (f.night) setNight(true);
-  if (LOW) setLow(true);
+  if (f.lowram) setLow(true);
+  if (f.debug) toggleDebug();
   var kinds = { cont: 0, movie: 1, show: 2, apps: 3 };
   setFocus('rows', FIRST, 0);
   if (f.focus) { var a = f.focus.split(':'); setFocus('rows', kinds[a[0]], +a[1]); }
