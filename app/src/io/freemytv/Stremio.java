@@ -47,23 +47,50 @@ final class Stremio {
         if (now >= at && now - at < EVERY) return;
         if (failedAt != 0 && now >= failedAt && now - failedAt < RETRY) return;
         fetching = true;
+        final Net.Cancel mine = new Net.Cancel();
+        running = mine;
         Work.io(() -> {
             try {
-                String body = Net.postJson(API, request(Config.STREMIO_AUTH_KEY.trim()), "Stremio", null);
+                String body = Net.postJson(API, request(Config.STREMIO_AUTH_KEY.trim()), "Stremio", mine);
                 List<ContinueItem> list = parse(new JSONObject(body), System.currentTimeMillis());
+                if (mine.isCancelled()) return;
+                boolean changed = !same(items, list);
                 items = Collections.unmodifiableList(list);
                 at = System.currentTimeMillis();
                 failedAt = 0;
                 save(list);
-                Work.MAIN.post(done);
+                if (changed) Work.MAIN.post(done);
             } catch (Exception e) {
+                if (mine.isCancelled()) return;
                 failedAt = System.currentTimeMillis();
                 // The message may name the host, never the key (it is in the body, not in any message).
                 AppLog.w("stremio: " + e.getMessage());
             } finally {
-                fetching = false;
+                synchronized (Stremio.class) {
+                    if (running == mine) { running = null; fetching = false; }
+                }
             }
         });
+    }
+
+    private static Net.Cancel running;
+
+    /** Cuts the request in flight (the home paused) and lets the next refresh start again. */
+    static synchronized void cancel() {
+        Net.Cancel c = running;
+        running = null;
+        fetching = false;
+        if (c != null) c.cancel();
+    }
+
+    /** Same cards: title, time, progress and link. */
+    static boolean same(List<ContinueItem> a, List<ContinueItem> b) {
+        if (a.size() != b.size()) return false;
+        for (int i = 0; i < a.size(); i++) {
+            ContinueItem x = a.get(i), y = b.get(i);
+            if (!x.title.equals(y.title) || x.at != y.at || x.progress != y.progress || !x.deepLink.equals(y.deepLink)) return false;
+        }
+        return true;
     }
 
     /** The request body: all library items. */

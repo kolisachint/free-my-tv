@@ -354,6 +354,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
         handler.removeCallbacks(reloadSoon);
         recs.removeDataListener(dataListener);
         recs.setActive(false);
+        details.cancelPending();
         wifi.stop();
         if (tvInputs != null) tvInputs.unregisterCallback(inputCallback);
         // Nothing is on screen: only what a visible screen needs (the open details sheet's two pictures) stays.
@@ -405,8 +406,26 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     };
 
     /** The rows' cards from the data layer (the cards are made again; each row keeps its column). */
+    private List<ContinueItem> shownContinue;
+    private List<Title> shownMovies, shownShows;
+
+    private static boolean sameTitles(List<Title> a, List<Title> b) {
+        if (a == b) return true;
+        if (a == null || b == null || a.size() != b.size()) return false;
+        for (int i = 0; i < a.size(); i++) {
+            if (!a.get(i).key().equals(b.get(i).key()) || a.get(i).stremio != b.get(i).stremio) return false;
+        }
+        return true;
+    }
+
     private void refreshRows() {
-        rows.setData(recs.continueItems(), recs.movies(), recs.shows());
+        List<ContinueItem> cont = recs.continueItems();
+        List<Title> movies = recs.movies(), shows = recs.shows();
+        if (shownContinue != null && Stremio.same(shownContinue, cont) && sameTitles(shownMovies, movies) && sameTitles(shownShows, shows)) return;
+        shownContinue = cont;
+        shownMovies = movies;
+        shownShows = shows;
+        rows.setData(cont, movies, shows);
         if (zone == Z_ROWS && !rows.has(focusRow)) {
             focusRow = rows.first();
             if (focusRow < 0) zone = Z_SHELF;

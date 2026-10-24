@@ -396,6 +396,7 @@ final class Recs {
     void setActive(boolean on) {
         active = on;
         catalog().setActive(on);
+        if (!on) Stremio.cancel();
     }
 
     /** Last problem fetching the rows ("" when fine), for a message under an empty home. */

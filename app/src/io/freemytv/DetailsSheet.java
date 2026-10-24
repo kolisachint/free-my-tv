@@ -52,7 +52,7 @@ final class DetailsSheet {
     private BitmapShader bgShader, posterShader;
     private final Object tag = new Object();
     private final Shader[] fadeL = new Shader[2], fadeB = new Shader[2];
-    private final String footnote;
+    private final String footnote, waysHead, noData;
     private float spin;
 
     DetailsSheet(HomeView home, Fx fx) {
@@ -65,6 +65,8 @@ final class DetailsSheet {
             fadeB[i] = new LinearGradient(0, 300, 0, 720, clear, page[i], Shader.TileMode.CLAMP);
         }
         footnote = Ui.tr("Where-to-watch data: JustWatch via TMDB");
+        waysHead = Ui.tr("Ways to watch");
+        noData = Ui.tr("No streaming data for this title.");
     }
 
     // MARK: - Open and close
@@ -96,6 +98,13 @@ final class DetailsSheet {
         }
         anim.target = 1;
         home.wake();
+    }
+
+    /** The home paused: the lookup in flight is cut (the sheet keeps what it has). */
+    void cancelPending() {
+        if (pending != null) pending.cancel();
+        pending = null;
+        loading = false;
     }
 
     void close(boolean animate) {
@@ -414,7 +423,7 @@ final class DetailsSheet {
         fx.drop(c, x, y, x + WW, y + WH, 36, 4, 12, 0.1f);
         fx.glass(c, x, y, x + WW, y + WH, 36, 1);
         fx.wHead.setColor(fx.ink());
-        c.drawText(Ui.tr("Ways to watch"), x + 28, Fx.base(y + 20, 52, fx.wHead), fx.wHead);
+        c.drawText(waysHead, x + 28, Fx.base(y + 20, 52, fx.wHead), fx.wHead);
         c.save();
         c.clipRect(x, y + 76, x + WW, y + WH - 16);
         float oy = y - scroll.value;
@@ -425,7 +434,7 @@ final class DetailsSheet {
                 Ui.spinner(c, x + WW / 2, y + 300, 26, spin, fx.stroke);
             } else {
                 fx.sFoot.setColor(fx.dim());
-                c.drawText(Ui.tr("No streaming data for this title."), x + 28, y + 130, fx.sFoot);
+                c.drawText(noData, x + 28, y + 130, fx.sFoot);
             }
         }
         int row = 0;
