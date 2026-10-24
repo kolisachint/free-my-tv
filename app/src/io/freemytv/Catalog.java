@@ -328,9 +328,14 @@ final class Catalog {
     Title lookUp(Title t, Net.Cancel c) throws Exception {
         synchronized (looked) {
             Title known = looked.get(t.key());
-            if (known != null && known.full) return known;
+            if (known != null && known.full) {
+                Title k = known.copy();
+                Tmdb.refreshInstalled(context, k);   // flags are never trusted from the cache
+                return k;
+            }
         }
         Title n = t.copy();
+        n.trailerYouTubeId = "";   // TMDB's trailer first, then Cinemeta's; never a stale one from the row
         JSONObject o = Tmdb.get("/" + t.kind + "/" + t.tmdbId + "?language=" + Tmdb.LANG
                 + "&append_to_response=watch/providers,external_ids,videos,credits&include_video_language=en,null", c);
         Tmdb.details(context, n, o);

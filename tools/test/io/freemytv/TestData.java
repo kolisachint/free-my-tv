@@ -18,8 +18,18 @@ public class TestData {
         fuzzy();
         stremio();
         sun();
+        stores();
         System.out.println(failures == 0 ? "All good." : failures + " failed.");
         System.exit(failures == 0 ? 0 : 1);
+    }
+
+    static void stores() {
+        String[][] want = {{"2", "com.apple.atve.sony.appletv"}, {"10", "com.amazon.amazonvideo.livingroom"}, {"192", Services.YOUTUBE_PKG}};
+        for (String[] w : want) {
+            boolean found = false;
+            for (String[] s : Services.STORES) found |= s[0].equals(w[0]) && s[2].equals(w[1]);
+            check(found, "store " + w[0] + " maps to " + w[1]);
+        }
     }
 
     static void fuzzy() {

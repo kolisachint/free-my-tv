@@ -128,16 +128,18 @@ final class Tmdb {
         int bestScore = -1;
         for (int i = 0; list != null && i < list.length(); i++) {
             JSONObject x = list.optJSONObject(i);
-            if (x == null || !"YouTube".equals(x.optString("site")) || !"Trailer".equals(x.optString("type"))) continue;
+            if (x == null || !"YouTube".equals(x.optString("site"))) continue;
+            String type = x.optString("type");
+            if (!"Trailer".equals(type) && !"Teaser".equals(type)) continue;   // a Trailer always beats a Teaser
             String key = x.optString("key");
             if (key.isEmpty()) continue;
-            int score = (x.optBoolean("official") ? 2 : 0) + ("en".equals(x.optString("iso_639_1")) ? 1 : 0);
+            int score = ("Trailer".equals(type) ? 100 : 0) + (x.optBoolean("official") ? 2 : 0) + ("en".equals(x.optString("iso_639_1")) ? 1 : 0);
             if (score > bestScore) {
                 bestScore = score;
                 best = key;
             }
         }
-        if (!best.isEmpty()) t.trailerYouTubeId = best;
+        t.trailerYouTubeId = best;   // TMDB's only; Catalog.lookUp falls back to Cinemeta when empty
         JSONObject credits = o.optJSONObject("credits");
         JSONArray cast = credits == null ? null : credits.optJSONArray("cast");
         t.cast = new java.util.ArrayList<>();
@@ -194,6 +196,13 @@ final class Tmdb {
     static void refreshInstalled(Context c, Title t) {
         java.util.Map<String, Boolean> have = new java.util.HashMap<>();
         for (Title.Provider p : t.providers) {
+            if (p.pkg == null) {   // saved before the store mapping existed: work it out again from the name
+                String[] s = Services.byName(c, p.name);
+                if (s != null) {
+                    p.appKey = s[1];
+                    p.pkg = s[2];
+                }
+            }
             if (p.pkg == null) {
                 p.installed = false;
                 continue;
@@ -209,6 +218,14 @@ final class Tmdb {
         for (Title.Provider p : t.providers) {
             if (p.installed || p.pkg == null) continue;
             for (String[] s : Services.TABLE) {
+                if (s[1].equals(p.appKey) && Services.installed(c, s[2])) {
+                    p.pkg = s[2];
+                    p.installed = true;
+                    break;
+                }
+            }
+            if (p.installed) continue;
+            for (String[] s : Services.STORES) {
                 if (s[1].equals(p.appKey) && Services.installed(c, s[2])) {
                     p.pkg = s[2];
                     p.installed = true;

@@ -148,7 +148,7 @@ final class Title {
         return new JSONObject().put("id", tmdbId).put("imdb", imdbId).put("kind", kind).put("title", title).put("year", year)
                 .put("genres", g).put("runtime", runtime).put("seasons", seasons).put("rating", rating).put("imdbRating", imdbRating)
                 .put("overview", overview).put("backdrop", backdropPath).put("poster", posterPath).put("trailer", trailerYouTubeId)
-                .put("cast", c).put("providers", p).put("stremio", stremio).put("detailed", detailed).put("full", full);
+                .put("cast", c).put("providers", p).put("stremio", stremio).put("detailed", detailed).put("fullv2", full);
     }
 
     static Title fromJson(JSONObject o) {
@@ -175,7 +175,7 @@ final class Title {
         t.trailerYouTubeId = o.optString("trailer");
         t.stremio = o.optBoolean("stremio");
         t.detailed = o.optBoolean("detailed");
-        t.full = o.optBoolean("full");
+        t.full = o.optBoolean("fullv2");   // "full" (older builds) had stale trailers/stores: looked up again
         return t;
     }
 

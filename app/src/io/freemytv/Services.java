@@ -123,6 +123,15 @@ final class Services {
         return first;
     }
 
+    /** The row for a provider line saved by name only: a streaming service, or a store ("Apple TV Store" 2, "Amazon Video" 10, "YouTube" 192). */
+    static String[] byName(Context c, String name) {
+        if (name == null) return null;
+        String n = name.toLowerCase(Locale.ROOT);
+        int id = n.equals("apple tv store") ? 2 : n.equals("amazon video") ? 10 : n.equals("youtube") ? 192 : 0;
+        if (id != 0) return store(c, id);
+        return null;
+    }
+
     /** Key of the service for a package ("com.netflix.ninja" → "netflix"), or null. */
     static String keyOf(String pkg) {
         if (STREMIO_PKG.equals(pkg)) return STREMIO;
