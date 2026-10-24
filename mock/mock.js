@@ -2,6 +2,9 @@
  * Free My TV: home mock logic. Plain ES5, no frameworks. Keys: arrows, Enter, Backspace/Esc (Back),
  * N = day/night, R = low-RAM. URL flags: ?night ?lowram ?drawer ?details=movie:0|show:2|cont:1 ?focus=show:3
  */
+var FLAGS = {};
+location.search.replace(/^\?/, '').split('&').forEach(function (p) { if (p) { var a = p.split('='); FLAGS[a[0]] = a[1] || '1'; } });
+var LOW = !!FLAGS.lowram, NOCONT = !!FLAGS.nocontinue, FIRST = NOCONT ? 1 : 0;
 var $ = function (id) { return document.getElementById(id); };
 var stage = $('stage');
 var SYM = '../app/assets/symbols/';
@@ -94,8 +97,8 @@ function buildRows() {
   var cont = CONTINUE.map(function (c) { return { item: SHOWS[c.index], cont: c }; });
   var defs = [
     { title: 'Continue in Stremio', kind: 'cont', items: cont, w: 520, h: 293, pitch: 576 },
-    { title: 'Movies', kind: 'movie', items: MOVIES.map(function (m) { return { item: m }; }), w: 360, h: 203, pitch: 392 },
-    { title: 'Shows', kind: 'show', items: SHOWS.map(function (m) { return { item: m }; }), w: 360, h: 203, pitch: 392 },
+    { title: 'Movies', kind: 'movie', items: MOVIES.slice(0, LOW ? 8 : 15).map(function (m) { return { item: m }; }), w: LOW ? 300 : 360, h: LOW ? 169 : 203, pitch: LOW ? 332 : 392 },
+    { title: 'Shows', kind: 'show', items: SHOWS.slice(0, LOW ? 8 : 15).map(function (m) { return { item: m }; }), w: LOW ? 300 : 360, h: LOW ? 169 : 203, pitch: LOW ? 332 : 392 },
     { title: 'Apps', kind: 'apps', items: APPS.map(function (a) { return { app: a }; }) }
   ];
   defs.forEach(function (d, r) {
@@ -103,6 +106,7 @@ function buildRows() {
     E('div', 'rlabel', row, d.title);
     d.count = E('div', 'rcount', row, '');
     d.el = row;
+    if (r < FIRST) row.style.display = 'none';
     d.strip = E('div', 'strip', row);
     d.els = [];
     if (d.kind === 'apps') {
@@ -119,7 +123,7 @@ function buildRows() {
       d.items.forEach(function (x, i) {
         var c = E('div', 'card', d.strip, null, 'left:' + (96 + i * d.pitch) + 'px;width:' + d.w + 'px');
         var img = E('div', 'img', c, null, 'width:' + d.w + 'px;height:' + d.h + 'px');
-        pic(img, x.item.bg, x.item.name);
+        pic(img, LOW ? x.item.bg.replace('/medium/', '/small/') : x.item.bg, x.item.name);
         if (d.kind === 'cont') {
           E('div', 'shade', img);
           E('div', 'left', img, 'S' + x.cont.season + ' E' + x.cont.ep + ' \u00B7 ' + x.cont.minsLeft + ' min left');
@@ -152,16 +156,11 @@ function setHero(it, cont) {
   E('div', 'ov', ht, it.overview);
   var bd = E('div', 'badges', ht);
   E('span', 'wt', bd, 'Watch on');
-  var inst = [], other = [], seen = {};
-  waysFor(it).forEach(function (g) { g.list.forEach(function (p) { if (seen[p.name]) return; seen[p.name] = 1; (p.installed ? inst : other).push(p.name); }); });
-  inst = inst.filter(function (x) { return x !== 'Stremio'; }).slice(0, 3);
-  var chips = inst.map(function (x) { return { n: x, i: true }; });
-  chips.push({ n: 'Stremio', i: true });
-  if (chips.length < 4 && other.length) chips.push({ n: other[0], i: false });
-  chips.forEach(function (c) {
-    var b = E('span', 'badge ' + (c.i ? 'inst' : 'other'), bd, c.n);
-    if (c.i) sym(b, 'check');
-    else E('small', null, b, ' \u00B7 not installed');
+  var inst = [], seen = {};
+  waysFor(it).forEach(function (g) { g.list.forEach(function (p) { if (seen[p.name]) return; seen[p.name] = 1; if (p.installed && p.name !== 'Stremio') inst.push(p.name); }); });
+  inst.slice(0, 3).concat(['Stremio']).forEach(function (n) {
+    var b = E('span', 'badge inst', bd, n);
+    sym(b, 'check');
   });
   hs.className = 'hslide on'; ht.className = 'htext on';
   $('hs' + old).className = 'hslide'; $('ht' + old).className = 'htext';
@@ -301,11 +300,11 @@ function move(dx, dy) {
   var z = S.zone;
   if (z === 'top') {
     if (dx) setFocus('top', Math.max(0, Math.min(2, S.top + dx)));
-    else if (dy > 0) setFocus('rows', 0);
+    else if (dy > 0) setFocus('rows', FIRST);
   } else if (z === 'rows') {
     var d = rows[S.row];
     if (dx) setFocus('rows', S.row, Math.max(0, Math.min(d.items.length - 1, S.cols[S.row] + dx)));
-    else if (dy < 0) { if (S.row === 0) setFocus('top', S.top); else setFocus('rows', S.row - 1); }
+    else if (dy < 0) { if (S.row === FIRST) setFocus('top', S.top); else setFocus('rows', S.row - 1); }
     else if (dy > 0) { if (S.row === 3) openDrawer(); else setFocus('rows', S.row + 1); }
   } else if (z === 'drawer') {
     if (dx) S.dc = Math.max(0, Math.min(drawerEls[S.dr].length - 1, S.dc + dx));
@@ -335,7 +334,7 @@ document.addEventListener('keydown', function (e) {
   else if (k === 'Enter') activate();
   else if (k === 'Backspace' || k === 'Escape') back();
   else if (k === 'n' || k === 'N') { setNight(!S.night); toast(S.night ? 'Night look' : 'Day look'); }
-  else if (k === 'r' || k === 'R') { setLow(!S.lowram); toast(S.lowram ? 'Low-RAM style: no shadows' : 'Full style: shadows on'); }
+  else if (k === 'r' || k === 'R') { var q = location.search.replace(/[?&]lowram(=1)?/, '').replace(/^&/, '?'); location.search = LOW ? q : (q ? q + '&lowram' : '?lowram'); }
   else used = false;
   if (used) e.preventDefault();
 });
@@ -354,13 +353,12 @@ window.addEventListener('resize', fit);
 
 /* MARK: - Start */
 buildTop(); buildRows(); buildDrawer(); fit();
-setFocus('rows', 0, 0);
 (function flags() {
-  var q = location.search.replace(/^\?/, '').split('&'), f = {};
-  q.forEach(function (p) { if (!p) return; var a = p.split('='); f[a[0]] = a[1] || '1'; });
+  var f = FLAGS;
   if (f.night) setNight(true);
-  if (f.lowram) setLow(true);
+  if (LOW) setLow(true);
   var kinds = { cont: 0, movie: 1, show: 2, apps: 3 };
+  setFocus('rows', FIRST, 0);
   if (f.focus) { var a = f.focus.split(':'); setFocus('rows', kinds[a[0]], +a[1]); }
   if (f.details) { var b = f.details.split(':'); setFocus('rows', kinds[b[0]], +b[1]); openDetails(kinds[b[0]], +b[1]); }
   if (f.drawer) { setFocus('rows', 3, 0); openDrawer(); }
