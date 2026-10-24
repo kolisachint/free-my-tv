@@ -30,6 +30,8 @@ before you do it, and let them do the taps on the TV.
    it. If they paste it in the chat anyway, put it only in `config.properties`.
    Without a key everything works except the picks and the screensaver photos.
    The same goes for the optional `watchmode_key` (free, watchmode.com; makes picks open the title's page): theirs, secret, only in `config.properties`.
+   The same for the optional `stremio_auth_key` ("Continue in Stremio"; they get it with `JSON.parse(localStorage.profile).auth.key`
+   in the browser console at web.stremio.com): theirs, secret, only in `config.properties`, never in the chat or the log.
 5. **Build:** `./build.sh` → `FreeMyTV.apk`. Keep `freemytv.keystore`: updates must be signed with the same key.
 6. **Install:** `adb connect <IP>:5555`. The TV asks *Allow USB debugging?*: tell them to accept and tick *Always
    allow*. Then `adb install -r FreeMyTV.apk`. If it hangs, Google Play Protect is asking on the TV (Android 14:
