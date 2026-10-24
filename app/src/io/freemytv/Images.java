@@ -115,6 +115,11 @@ final class Images {
         return dir;
     }
 
+    /** Memory cache: pictures held and their size in bytes (the debug overlay). */
+    static int cacheCount() { return memory().size() == 0 ? 0 : memory().snapshot().size(); }
+
+    static long cacheBytes() { return memory().size(); }
+
     /** The picture if it is already in memory at that size, else null. Main thread; no I/O. */
     static Bitmap peek(String url, int w, int h) {
         return memory().get(url + "@" + w + "x" + h);

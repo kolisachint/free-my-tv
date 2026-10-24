@@ -132,6 +132,26 @@ final class Prefs {
     static boolean photos() { return sp().getBoolean("photos", true); }
     static void setPhotos(boolean on) { put("photos", on); }
 
+    // MARK: - Recent searches (the home's search screen): the last 5, newest first. No `version` bump: nothing redraws for it.
+
+    static List<String> recentSearches() {
+        List<String> out = new ArrayList<>();
+        if (app == null) return out;
+        for (String q : sp().getString("recentSearches", "").split("\n")) if (!q.isEmpty()) out.add(q);
+        return out;
+    }
+
+    static void addRecentSearch(String q) {
+        q = q == null ? "" : q.replaceAll("\\s+", " ").trim();
+        if (q.length() < 2 || app == null) return;
+        List<String> list = recentSearches();
+        for (int i = list.size() - 1; i >= 0; i--) if (list.get(i).equalsIgnoreCase(q)) list.remove(i);
+        list.add(0, q);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < Math.min(5, list.size()); i++) sb.append(i == 0 ? "" : "\n").append(list.get(i));
+        sp().edit().putString("recentSearches", sb.toString()).apply();
+    }
+
     // MARK: - Shelf
 
     /** Packages on the home shelf, in order; null until the user edits it (then the built-in list applies). */
