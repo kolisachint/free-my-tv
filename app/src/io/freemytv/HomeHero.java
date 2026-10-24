@@ -64,7 +64,7 @@ final class HomeHero {
             s.url = t.backdropUrl(1280);
             List<String> seen = new ArrayList<>();
             for (Title.Provider p : t.providers) {
-                if (p.installed && !seen.contains(p.name) && !"Stremio".equals(p.name) && seen.size() < 3) seen.add(p.name);
+                if (p.installed && Title.Provider.STREAM.equals(p.kind) && !seen.contains(p.name) && !"Stremio".equals(p.name) && seen.size() < 3) seen.add(p.name);
             }
             for (String n : seen) s.chips.add(n);
             if (t.stremio) s.chips.add("Stremio");
