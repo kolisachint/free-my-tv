@@ -444,6 +444,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
             wake();
             data.refreshIfStale();
             recs.refresh();
+            if (rows.first() < 0) dirty = true;   // the empty-state message may have changed
             checkNotices();
             checkNight(true);
             if (debug && SystemClock.uptimeMillis() - perfLogAt >= 30_000) {
@@ -641,6 +642,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
         c.save();
         c.translate(0, -110 * d);
         hero.draw(c, 1);
+        if (rows.first() < 0) drawEmpty(c);
         drawTop(c);
         c.save();
         c.clipRect(0, 596, 1920, 1200);
@@ -664,6 +666,32 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     }
 
     // MARK: - Top bar: clock and four round buttons
+
+    /** The hero area while there are no rows: says why (no key, loading, or the error), never a blank page. */
+    private void drawEmpty(Canvas c) {
+        if (emptyTitle == null) {
+            emptyTitle = Ui.text(Ui.displaySemibold, 52, 0xFFFFFFFF);
+            emptyNote = Ui.text(Ui.medium, 30, 0xFFFFFFFF);
+        }
+        String title, note;
+        String err = recs.rowsError();
+        if (!Recs.hasKey(getContext())) {
+            title = Ui.tr("No recommendations yet");
+            note = Ui.tr("Add a free TMDB key in config.properties and build again.");
+        } else if (!err.isEmpty()) {
+            title = Ui.tr("Couldn't load recommendations");
+            note = Ui.tr("Check the TMDB key and the internet connection. It tries again soon.");
+        } else {
+            title = Ui.tr("Loading recommendations…");
+            note = Ui.tr("The first time can take a minute on this TV.");
+        }
+        emptyTitle.setColor(tone(INK, WHITE));
+        emptyNote.setColor(Fx.alpha(tone(INK, WHITE), 0.7f));
+        c.drawText(title, 96, 330, emptyTitle);
+        c.drawText(note, 96, 392, emptyNote);
+    }
+
+    private Paint emptyTitle, emptyNote;
 
     private void drawTop(Canvas c) {
         fx.clockT.setColor(fx.ink());

@@ -76,11 +76,12 @@ final class Catalog {
 
     String error() { return error; }
 
-    /** false while the home screen is paused: running requests are cut and nothing new starts. */
+    /**
+     * false while the home screen is paused: nothing new starts. A fetch already running is NOT cut: on a slow TV the
+     * first request alone takes ~25 s, and cutting it every time the person opens an app meant the rows never arrived.
+     */
     void setActive(boolean on) {
         active = on;
-        Net.Cancel c = cancel;
-        if (!on && c != null) c.cancel();
     }
 
     /** A short SHA-256 of the key, so the saved stamp doesn't carry anything of it. */
