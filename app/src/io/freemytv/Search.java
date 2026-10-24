@@ -32,6 +32,7 @@ final class Search {
         String query = "";
         List<Title> titles = new ArrayList<>();     // at most 9, best first
         List<AppMatch> apps = new ArrayList<>();    // best first
+        boolean partial;                            // titles are in but their ways to watch are still coming (a final Result follows)
         boolean failed;                             // the network or TMDB failed (titles is empty then)
     }
 
@@ -61,20 +62,30 @@ final class Search {
             });
             return;
         }
-        Work.io(() -> {
+        // Its own thread: the shared io threads can be busy with the home's rows for a long time.
+        Thread th = new Thread(() -> {
             Result r = new Result();
             r.query = text;
             r.apps = apps(app, text);
             try {
-                r.titles = titles(app, text, cancel);
-            } catch (Exception e) {
+                r.titles = titles(app, text, cancel, early -> {
+                    Result p = new Result();
+                    p.query = text;
+                    p.apps = r.apps;
+                    p.titles = early;
+                    p.partial = true;
+                    Work.MAIN.post(() -> { if (current(mine)) cb.onResult(p); });
+                });
+            } catch (Throwable e) {
                 if (cancel.isCancelled()) return;
                 r.failed = true;
-                AppLog.w("search: " + e.getMessage());
+                AppLog.w("search '" + text.length() + " letters' failed: " + e);
             }
             if (cancel.isCancelled()) return;
             Work.MAIN.post(() -> { if (current(mine)) cb.onResult(r); });
-        });
+        }, "fmtv-search");
+        th.setDaemon(true);
+        th.start();
     }
 
     /** Cuts the running query (the search screen closed). */
@@ -88,7 +99,7 @@ final class Search {
         return g == generation;
     }
 
-    private static List<Title> titles(Context c, String text, Net.Cancel cancel) throws Exception {
+    private static List<Title> titles(Context c, String text, Net.Cancel cancel, java.util.function.Consumer<List<Title>> early) throws Exception {
         JSONArray found = Tmdb.get("/search/multi?query=" + URLEncoder.encode(text, "UTF-8") + "&language=" + Tmdb.LANG
                 + "&region=" + Tmdb.REGION + "&include_adult=false&page=1", cancel).getJSONArray("results");
         final List<Title> list = new ArrayList<>();
@@ -114,6 +125,7 @@ final class Search {
         });
         final List<Title> top = new ArrayList<>();
         for (int i : order) if (top.size() < MAX_TITLES) top.add(list.get(i));
+        early.accept(new ArrayList<>(top));
         // Ways to watch for the first 5 (one call each: details with providers and the IMDb id), 4 at a time.
         List<Runnable> jobs = new ArrayList<>();
         for (int i = 0; i < Math.min(DETAILED, top.size()); i++) {

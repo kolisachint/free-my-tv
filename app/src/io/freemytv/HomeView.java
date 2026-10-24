@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.ActivityOptions;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.LauncherApps;
@@ -905,12 +906,37 @@ final class HomeView extends View implements Choreographer.FrameCallback {
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 .putExtra(RecognizerIntent.EXTRA_PROMPT, Ui.tr("Say a movie, a show or an app"));
         try {
+            ComponentName target = voiceTarget(i);
+            if (target != null) i.setComponent(target);   // no "Complete action using" chooser
             voiceAsked = true;
             activity.startActivityForResult(i, REQ_VOICE);
         } catch (ActivityNotFoundException | SecurityException e) {
             voiceAsked = false;
             showToast(Ui.tr("Voice search isn't available on this TV."));
         }
+    }
+
+    /** The one speech recognizer to use: the Google app on TV (katniss), else the default, else the first that answers. */
+    private ComponentName voiceTarget(Intent i) {
+        try {
+            android.content.pm.PackageManager pm = activity.getPackageManager();
+            List<android.content.pm.ResolveInfo> all = pm.queryIntentActivities(i, 0);
+            for (android.content.pm.ResolveInfo r : all) {
+                if (r.activityInfo != null && "com.google.android.katniss".equals(r.activityInfo.packageName)) {
+                    return new ComponentName(r.activityInfo.packageName, r.activityInfo.name);
+                }
+            }
+            android.content.pm.ResolveInfo def = pm.resolveActivity(i, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
+            if (def != null && def.activityInfo != null && !"android".equals(def.activityInfo.packageName)) {
+                return new ComponentName(def.activityInfo.packageName, def.activityInfo.name);
+            }
+            for (android.content.pm.ResolveInfo r : all) {
+                if (r.activityInfo != null && r.activityInfo.exported) return new ComponentName(r.activityInfo.packageName, r.activityInfo.name);
+            }
+        } catch (RuntimeException e) {
+            AppLog.w("voice: " + e);
+        }
+        return null;
     }
 
     /** What was said: search opens with it, and the focus goes to the first result. */
@@ -1343,7 +1369,11 @@ final class HomeView extends View implements Choreographer.FrameCallback {
             handler.removeCallbacks(holdStart);
         }
         if (code == KeyEvent.KEYCODE_SEARCH || code == KeyEvent.KEYCODE_VOICE_ASSIST) {
-            if (down && e.getRepeatCount() == 0 && !sheetOpen) startVoice();
+            if (down && e.getRepeatCount() == 0 && !sheetOpen) {
+                if (details.open) details.close(false);
+                if (!search.open) openSearch();
+                startVoice();
+            }
             return true;
         }
         if (code == KeyEvent.KEYCODE_MENU) {

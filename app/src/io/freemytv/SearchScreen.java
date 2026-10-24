@@ -21,6 +21,7 @@ import java.util.List;
  */
 final class SearchScreen {
     private static final int FIELD = 0, KEYS = 1, RESULTS = 2;
+    private static final int IDLE = 0, LOADING = 1, DONE = 2;
     private static final int MODE_IDLE = 0, MODE_EMPTY = 1, MODE_LIST = 2;
     private static final float RX = 720, RY = 190, TILE_W = 1104, TILE_H = 340, APP_H = 120, GAP = 32;
     private static final long DEBOUNCE_MS = 300;
@@ -64,6 +65,8 @@ final class SearchScreen {
     private String query = "", shown = "";
     private int area = KEYS, kr, kc, resRow, resIdx;
     private int mode = MODE_IDLE;
+    private int state = IDLE;
+    private boolean hasLast, focusFirst;
     private final List<Key> keys = new ArrayList<>();
     private final List<Label> labels = new ArrayList<>();
     private final List<List<Chip>> chipRows = new ArrayList<>();
@@ -110,6 +113,8 @@ final class SearchScreen {
         trending = trendingTitles;
         query = "";
         shown = "";
+        state = IDLE;
+        hasLast = focusFirst = false;
         area = KEYS;
         kr = kc = 0;
         resRow = resIdx = 0;
@@ -147,34 +152,39 @@ final class SearchScreen {
 
     /** A key typed on the TV's keyboard or the on-screen one. */
     void type(String value) {
+        String q = query;
         if (value.equals("del")) {
-            if (!query.isEmpty()) query = query.substring(0, query.length() - 1);
+            if (!q.isEmpty()) q = q.substring(0, q.length() - 1);
         } else if (value.equals("clear")) {
-            query = "";
-        } else if (query.length() < 40) {
-            query = query + value;
+            q = "";
+        } else if (q.length() < 40) {
+            q = q + value;
         }
-        changed(false);
+        setQuery(q, false);
     }
 
     boolean hasQuery() { return !query.isEmpty(); }
 
-    /** Voice result: fills the query, searches now and puts the focus on the first result. */
+    /** Voice result: fills the query, searches now and puts the focus on the first result when it arrives. */
     void voice(String text) {
-        query = text.length() > 40 ? text.substring(0, 40) : text;
-        Prefs.addRecentSearch(query);
-        changed(true);
-        area = RESULTS;
-        resRow = resIdx = 0;
-        retarget();
+        focusFirst = true;
+        setQuery(text, true);
+        Prefs.addRecentSearch(query.trim());
     }
 
-    private void changed(boolean now) {
+    /** The one way the query changes (keys, hardware keyboard, voice, chips): schedules the search (now, or after 300 ms). */
+    private void setQuery(String text, boolean now) {
+        query = text.length() > 40 ? text.substring(0, 40) : text;
         shown = Fx.fit(query, fx.sq, 1040);
         home.handler().removeCallbacks(run);
         if (query.trim().length() >= 2) {
+            state = LOADING;
+            notice = "";
+            if (!hasLast) layoutResults(null);   // nothing to keep on screen: show "Searching\u2026"
             if (now) runQuery(); else home.handler().postDelayed(run, DEBOUNCE_MS);
         } else {
+            state = IDLE;
+            hasLast = false;
             Search.cancel();
             notice = "";
             layoutResults(null);
@@ -184,10 +194,21 @@ final class SearchScreen {
 
     private void runQuery() {
         final String asked = query.trim();
+        if (asked.length() < 2) return;
+        state = LOADING;
         Search.query(home.context(), asked, result -> {
             if (!open || !asked.equals(query.trim())) return;
+            hasLast = true;
+            state = result.partial ? LOADING : DONE;
             notice = result.failed ? Ui.tr("Can't search right now. Check the internet.") : "";
             layoutResults(result);
+            if (!result.partial && !result.failed && (!result.titles.isEmpty() || !result.apps.isEmpty())) Prefs.addRecentSearch(asked);
+            if (focusFirst && (!result.titles.isEmpty() || !result.apps.isEmpty())) {
+                focusFirst = false;
+                area = RESULTS;
+                resRow = resIdx = 0;
+                retarget();
+            }
             home.wake();
         });
     }
@@ -226,13 +247,19 @@ final class SearchScreen {
             }
             label(Ui.tr("Trending"), y, 0);
             chips(trending, y + 64);
-        } else if (r != null && r.titles.isEmpty() && r.apps.isEmpty()) {
+        } else if (r == null) {
+            mode = MODE_EMPTY;
+            label(Ui.tr("Searching\u2026"), 0, 2);
+        } else if (r.titles.isEmpty() && r.apps.isEmpty() && r.partial) {
+            mode = MODE_EMPTY;
+            label(Ui.tr("Searching\u2026"), 0, 2);
+        } else if (r.titles.isEmpty() && r.apps.isEmpty()) {
             mode = MODE_EMPTY;
             label(Ui.trf("No results for \u2018{q}\u2019.", "q", Fx.fit(query.trim(), fx.sEmpty, 700)), 0, 2);
             note(notice.isEmpty() ? Ui.tr("Try a shorter word.") : notice, 90);
             label(Ui.tr("Trending"), 190, 0);
             chips(trending, 254);
-        } else if (r != null) {
+        } else {
             mode = MODE_LIST;
             float y = 12;
             List<Object> list = new ArrayList<>();
@@ -245,9 +272,7 @@ final class SearchScreen {
                 y += t.h + GAP;
                 tiles.add(t);
             }
-            listY.snap(0);
-        } else {
-            return;   // an answer is on its way: what is shown stays
+            if (area != RESULTS) listY.snap(0);
         }
         if (area == RESULTS && !hasResults()) area = KEYS;
         resRow = Math.min(resRow, Math.max(0, rowCount() - 1));
@@ -432,9 +457,8 @@ final class SearchScreen {
             }
         } else if (resRow < chipRows.size() && resIdx < chipRows.get(resRow).size()) {
             String text = chipRows.get(resRow).get(resIdx).text;
-            query = text;
             Prefs.addRecentSearch(text);
-            changed(true);
+            setQuery(text, true);
         }
     }
 
