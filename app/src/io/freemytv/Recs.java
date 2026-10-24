@@ -53,6 +53,18 @@ final class Recs {
 
     interface Listener { void onRecs(); }
 
+    /** Result of an asynchronous call, on the main thread. `value` is null when it failed. */
+    interface Callback<T> { void onResult(T value); }
+
+    /** Changes to the home data (main thread). Override what you need. */
+    interface DataListener {
+        /** The movie or show rows changed (fresh fetch, apps installed or removed, details learned). */
+        default void onRows() {}
+
+        /** The Continue row may have changed (a title was opened, Stremio answered). */
+        default void onContinue() {}
+    }
+
     private static final String API = "https://api.themoviedb.org/3";
     /** The backdrops: TMDB's 1280-wide copy (never "original": it costs download, disk and decoding for nothing). */
     private static final String IMAGES = "https://image.tmdb.org/t/p/w1280";
@@ -62,45 +74,8 @@ final class Recs {
     /** Bump when what is saved for each title changes (the saved list is discarded and fetched again). */
     private static final int CACHE_VERSION = 4;
     private static final int MANHA = 0, TARDE = 1, NOITE = 2;
-    /** Service name on TMDB (part of the name, lowercase) → TV app (HomeApps key, package). */
-    private static final String[][] SERVICES = {
-        {"netflix", "netflix", "com.netflix.ninja"},
-        {"prime video", "prime", "com.amazon.amazonvideo.livingroom"},
-        {"prime video", "prime", "com.amazon.firebat"},
-        {"prime video", "prime", "com.amazon.avod"},
-        {"disney", "disney", "com.disney.disneyplus"},
-        {"hulu", "hulu", "com.hulu.livingroomplus"},
-        {"hulu", "hulu", "com.hulu.plus"},
-        {"paramount", "paramount", "com.cbs.ott"},
-        {"peacock", "peacock", "com.peacocktv.peacockandroid"},
-        {"peacock", "peacock", "com.peacock.peacockfiretv"},
-        {"globoplay", "globoplay", "com.globo.globotv"},
-        {"max", "max", "com.wbd.stream"},
-        {"max", "max", "com.hbo.hbonow"},
-        {"apple tv", "appletv", "com.apple.atve.androidtv.appletv"},
-        {"apple tv", "appletv", "com.apple.atve.sony.appletv"},   // Sony's own build
-        {"apple tv", "appletv", "com.apple.atve.amazon.appletv"},
-        {"hotstar", "hotstar", "in.startv.hotstar"},   // TMDB: "JioHotstar" (earlier "Disney Plus Hotstar")
-        {"okko", "okko", "ru.more.play"},
-        {"crunchyroll", "crunchyroll", "com.crunchyroll.crunchyroid"},
-        {"oneplay", "oneplay", "net.cme.voyo.cz.tvapp"},    // Czechia: Voyo and O2 TV became Oneplay, same app
-    };
-    private static final Map<String, String> SERVICE_NAME = new HashMap<>();
-    static {
-        SERVICE_NAME.put("netflix", "Netflix");
-        SERVICE_NAME.put("prime", "Prime Video");
-        SERVICE_NAME.put("disney", "Disney+");
-        SERVICE_NAME.put("hulu", "Hulu");
-        SERVICE_NAME.put("paramount", "Paramount+");
-        SERVICE_NAME.put("peacock", "Peacock");
-        SERVICE_NAME.put("globoplay", "Globoplay");
-        SERVICE_NAME.put("max", "Max");
-        SERVICE_NAME.put("appletv", "Apple TV");
-        SERVICE_NAME.put("hotstar", "JioHotstar");
-        SERVICE_NAME.put("okko", "Okko");
-        SERVICE_NAME.put("crunchyroll", "Crunchyroll");
-        SERVICE_NAME.put("oneplay", "Oneplay");
-    }
+    private static final String[][] SERVICES = Services.TABLE;
+    private static final Map<String, String> SERVICE_NAME = Services.NAME;
     /** Country for "what streams where" (config.properties "tmdb_region", e.g. US, GB, BR). */
     static final String REGION = Config.TMDB_REGION.trim().toUpperCase(Locale.ROOT);
     /** The errors the settings say in words: TMDB lists none of the TV's apps in REGION, or the TV has none we know. */
@@ -389,6 +364,108 @@ final class Recs {
         main.post(() -> { for (Listener l : new ArrayList<>(listeners)) l.onRecs(); });
     }
 
+    // MARK: - Rows, details, Continue (the redesigned home; docs/home-data-api.md)
+
+    private final Catalog catalog() { return Catalog.get(context); }
+
+    void addDataListener(DataListener l) { catalog().addListener(l); }
+    void removeDataListener(DataListener l) { catalog().removeListener(l); }
+
+    /** Up to 15 movies playable on this TV now (an installed streaming app has them, or Stremio does). Cheap: a saved list. */
+    List<Title> movies() { return catalog().movies(); }
+
+    /** Up to 15 shows, as movies(). */
+    List<Title> shows() { return catalog().shows(); }
+
+    /**
+     * Call when the home appears and every minute or so while it is visible: fetches the rows (every 6 h, or when the
+     * apps changed) and Stremio's in-progress list (every 5 min) in the background; onRows/onContinue tell when they
+     * changed. Does nothing while paused (setActive(false)) or without a TMDB key.
+     */
+    void refresh() {
+        Catalog c = catalog();
+        if (!active) return;
+        c.recheckInstalled();
+        c.refreshIfStale();
+        Stremio.refreshIfStale(c::notifyContinue);
+    }
+
+    private volatile boolean active = true;
+
+    /** false in onPause (running requests are cut, nothing new starts), true in onResume. */
+    void setActive(boolean on) {
+        active = on;
+        catalog().setActive(on);
+    }
+
+    /** Last problem fetching the rows ("" when fine), for a message under an empty home. */
+    String rowsError() { return catalog().error(); }
+
+    /**
+     * Looks the title up on TMDB for the details sheet: trailer (YouTube id; Cinemeta's if TMDB has none), top 3 cast,
+     * full ways to watch (stream, rent, buy). The answer is a new Title (also swapped into the rows) and is cached.
+     * Returns a handle: cancel() when the sheet closes.
+     */
+    Net.Cancel details(Title t, Callback<Title> cb) {
+        Net.Cancel cancel = new Net.Cancel();
+        Work.io(() -> {
+            Title out = null;
+            try {
+                out = catalog().lookUp(t, cancel);
+            } catch (Exception e) {
+                if (!cancel.isCancelled()) AppLog.w("details: " + e.getMessage());
+            }
+            final Title result = out;
+            if (!cancel.isCancelled()) Work.MAIN.post(() -> cb.onResult(result));
+        });
+        return cancel;
+    }
+
+    /** Titles opened from the home plus Stremio's in-progress ones: the latest 2 of each, newest first, 4 at most. */
+    List<ContinueItem> continueItems() {
+        long now = System.currentTimeMillis();
+        int version = History.version;
+        List<ContinueItem> stremio = Stremio.items();
+        if (continueCache != null && version == continueVersion && stremio == continueStremio && now - continueAt < 60_000L && now >= continueAt) {
+            return continueCache;
+        }
+        List<ContinueItem> list = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (ContinueItem c : stremio) {
+            if (list.size() >= 2) break;
+            list.add(c);
+            if (!c.imdbId.isEmpty()) seen.add(c.imdbId);
+        }
+        int taken = 0;
+        for (ContinueItem c : History.items(History.MAX, now)) {
+            if (taken >= 2) break;
+            if (!c.imdbId.isEmpty() && seen.contains(c.imdbId)) continue;   // already shown with its progress
+            list.add(c);
+            taken++;
+        }
+        java.util.Collections.sort(list, (a, b) -> Long.compare(b.at, a.at));
+        continueCache = java.util.Collections.unmodifiableList(list);
+        continueVersion = version;
+        continueStremio = stremio;
+        continueAt = now;
+        return continueCache;
+    }
+
+    private volatile List<ContinueItem> continueCache, continueStremio;
+    private volatile int continueVersion = -1;
+    private volatile long continueAt;
+
+    /** Watchmode's page address for the title in the app (cached; null without watchmode_key). Blocking: not on the main thread. */
+    String watchLink(Title t, String appKey, String pkg) {
+        Pick p = new Pick();
+        p.id = t.tmdbId;
+        p.kind = t.kind;
+        p.app = appKey;
+        p.pkg = pkg;
+        findLink(p);
+        return p.link;
+    }
+
     // MARK: - TMDB
 
     private void fetchList(int p) throws Exception {
@@ -581,35 +658,12 @@ final class Recs {
         return best;
     }
 
-    /** The SERVICES row for a TMDB name: the installed one first, when a service has more than one package. */
     private String[] service(String name, int providerId) {
-        String n = name.toLowerCase(Locale.ROOT);
-        String[] first = null;
-        // "HBO Max Amazon Channel", "Apple TV Amazon Channel"...: a subscription sold inside another app, not this one.
-        if (n.contains(" channel")) return null;
-        for (String[] s : SERVICES) {
-            // Apple TV: only the streaming service (TMDB provider 350); provider 2 is the Apple TV Store (rent or buy).
-            if (s[1].equals("appletv") && providerId != 350) continue;
-            if (!(s[0].equals("max") ? n.matches(".*\\bmax\\b.*") : n.contains(s[0]))) continue;
-            if (installed(s[2])) return s;
-            if (first == null) first = s;
-        }
-        return first;
+        return Services.match(context, name, providerId);
     }
 
-    /** Services named in hide_services (config.properties), trimmed and lowercased: never a source of picks. */
-    private static final Set<String> HIDDEN = new HashSet<>();
-    static {
-        for (String s : Config.HIDE_SERVICES.split(",")) {
-            String key = s.trim().toLowerCase(Locale.ROOT);
-            if (!key.isEmpty()) HIDDEN.add(key);
-        }
-    }
-
-    /** The service's app is on the TV, and the service isn't hidden (an app the TV ships without a subscription, say). */
     private boolean installed(String pkg) {
-        if (!HIDDEN.isEmpty()) for (String[] s : SERVICES) if (s[2].equals(pkg) && HIDDEN.contains(s[1])) return false;
-        return HomeApps.launchIntent(context.getPackageManager(), pkg) != null;
+        return Services.installed(context, pkg);
     }
 
     private long sourceStamp() {
