@@ -132,7 +132,7 @@ final class HomeRows {
                 c.title = t;
                 c.name = t.title;
                 c.line2 = t.cardLine();
-                c.url = t.backdropUrl(Math.round(c.w));
+                c.url = t.backdropUrl(300);   // w300: the smallest TMDB size, ~1.2x up on a 360 px card, a third less memory than w500
             }
             c.name = Fx.fit(c.name, fx.cardT, c.w);
             c.line2 = Fx.fit(c.line2, fx.cardM, c.w);

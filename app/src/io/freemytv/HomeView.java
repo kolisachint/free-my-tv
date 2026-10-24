@@ -196,6 +196,8 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     private int menuPresses;
     private long menuAt, perfLogAt, lastFrameNanos;
     private float frameMs, drawMs;
+    private final float[] perfMs = new float[1024];
+    private int perfN;
     private int jankFrames, frames;
     private String debugText = "";
 
@@ -448,11 +450,6 @@ final class HomeView extends View implements Choreographer.FrameCallback {
             if (rows.first() < 0) dirty = true;   // the empty-state message may have changed
             checkNotices();
             checkNight(true);
-            if (debug && SystemClock.uptimeMillis() - perfLogAt >= 30_000) {
-                perfLogAt = SystemClock.uptimeMillis();
-                AppLog.w("perf bitmaps=" + bitmaps() + " cacheMB=" + String.format(java.util.Locale.US, "%.1f", Images.cacheBytes() / 1048576f)
-                        + " jankFrames=" + jankFrames + "/" + frames);
-            }
             handler.postDelayed(this, 15_000);
         }
     };
@@ -512,6 +509,21 @@ final class HomeView extends View implements Choreographer.FrameCallback {
             frameMs = (frameTimeNanos - lastFrameNanos) / 1e6f;
             frames++;
             if (frameMs > 20.5f) jankFrames++;
+            if (debug) {
+                if (perfN < perfMs.length) perfMs[perfN++] = frameMs;
+                long nowMs = SystemClock.uptimeMillis();
+                if (nowMs - perfLogAt >= 5000) {
+                    perfLogAt = nowMs;
+                    float p95 = 0;
+                    if (perfN > 0) {
+                        java.util.Arrays.sort(perfMs, 0, perfN);
+                        p95 = perfMs[Math.min(perfN - 1, (int) (perfN * 0.95f))];
+                    }
+                    AppLog.w("perf frames=" + perfN + " p95=" + Math.round(p95) + "ms nativeMB=" + (android.os.Debug.getNativeHeapAllocatedSize() >> 20)
+                            + " bitmaps=" + bitmaps() + " cacheMB=" + (Images.cacheBytes() >> 20));
+                    perfN = 0;
+                }
+            }
         }
         lastFrameNanos = frameTimeNanos;
         lastNanos = frameTimeNanos;

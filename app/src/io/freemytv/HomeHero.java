@@ -13,11 +13,11 @@ import java.util.List;
 /**
  * The top ~600 px: the focused item's backdrop (w1280, faded into the page by one small pre-made gradient, never
  * blurred per frame), its title, meta line, two-line overview and the "Watch on" chips (installed apps, then Stremio).
- * A change crossfades both slides (alpha only, 150 ms). The picture is asked for ~120 ms after the focus settles, so
+ * A change crossfades both slides (alpha only, 150 ms). The picture is asked for ~250 ms after the focus settles, so
  * scrolling fast along a row loads nothing in between.
  */
 final class HomeHero {
-    private static final long FADE_MS = 150, DEBOUNCE_MS = 120;
+    private static final long FADE_MS = 150, DEBOUNCE_MS = 250;
     private static final Object TAG = new Object();
     static final float X = 560, W = 1360, H = 765;
 
@@ -35,6 +35,7 @@ final class HomeHero {
     private final Fx fx;
     private Slide cur = new Slide(), old;
     private long fadeAt;
+    private final android.util.LruCache<String, StaticLayout> overviews = new android.util.LruCache<>(24);
     private final Runnable load = this::loadNow;
     private int imgW = 1360, imgH = 765;
     private float checkW = 28;
@@ -60,7 +61,11 @@ final class HomeHero {
         s.title = Fx.fit(t != null ? t.title : card.cont != null ? card.cont.title : card.name, fx.heroTitle, 940);
         if (t != null) {
             s.meta = Fx.fit(t.metaLine() + (t.ratingText().isEmpty() ? "" : " \u00B7 " + (t.imdbRating ? "IMDb " : "TMDB ") + t.ratingText()), fx.heroMeta, 940);
-            s.overview = Fx.layout(t.overview, fx.heroOv, 900, 2, Layout.Alignment.ALIGN_NORMAL, 45 - fx.heroOv.getFontSpacing());
+            s.overview = overviews.get(key);
+            if (s.overview == null) {
+                s.overview = Fx.layout(t.overview, fx.heroOv, 900, 2, Layout.Alignment.ALIGN_NORMAL, 45 - fx.heroOv.getFontSpacing());
+                overviews.put(key, s.overview);
+            }
             s.url = t.backdropUrl(1280);
             List<String> seen = new ArrayList<>();
             for (Title.Provider p : t.providers) {
@@ -108,6 +113,7 @@ final class HomeHero {
         Images.cancel(TAG);
         cur.img = null;
         old = null;
+        overviews.evictAll();
         cur.key = "";
     }
 

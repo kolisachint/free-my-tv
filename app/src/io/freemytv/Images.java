@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Loads pictures for the home: two background threads (the newest request first: when focus moves on, what you
  * are looking at now loads before what you passed), decoded small (sampled, then scaled to the size asked, RGB_565
- * for JPEGs), an in-memory LruCache of min(16 MB, maxMemory / 8) and a disk cache of the downloaded files in
+ * for JPEGs), an in-memory LruCache of min(10 MB, maxMemory / 8) and a disk cache of the downloaded files in
  * cacheDir/img (40 MB, oldest pruned). Requests are cancelled by tag. Callbacks run on the main thread.
  *
  * Windowed loading is the caller's job: ask for the cards near the focus, cancel(tag) for the ones that left, and
@@ -83,7 +83,7 @@ final class Images {
 
     private static synchronized LruCache<String, Bitmap> memory() {
         if (memory == null) {
-            long max = Math.min(16L * 1024 * 1024, Runtime.getRuntime().maxMemory() / 8);
+            long max = Math.min(10L * 1024 * 1024, Runtime.getRuntime().maxMemory() / 8);
             memory = new LruCache<String, Bitmap>((int) max) {
                 @Override protected int sizeOf(String key, Bitmap b) { return b.getByteCount(); }
             };
@@ -184,6 +184,7 @@ final class Images {
 
     // MARK: - Loading
 
+    private static final Object DECODE = new Object();
     private static final Map<String, Object> LOCKS = new HashMap<>();
 
     private static Bitmap load(Request r) throws IOException {
@@ -213,6 +214,7 @@ final class Images {
             //noinspection ResultOfMethodCallIgnored
             f.setLastModified(System.currentTimeMillis());   // oldest-used goes first when the cache is full
         }
+        if (r.cancelled) return null;
         BitmapFactory.Options bounds = new BitmapFactory.Options();
         bounds.inJustDecodeBounds = true;
         BitmapFactory.decodeFile(f.getPath(), bounds);
@@ -227,11 +229,16 @@ final class Images {
         o.inSampleSize = sample(scale);
         boolean opaque = !"image/png".equals(bounds.outMimeType) && !"image/webp".equals(bounds.outMimeType);
         o.inPreferredConfig = opaque ? Bitmap.Config.RGB_565 : Bitmap.Config.ARGB_8888;
-        Bitmap b = BitmapFactory.decodeFile(f.getPath(), o);
+        if (r.cancelled) return null;
+        Bitmap b;
+        synchronized (DECODE) {   // downloads overlap, decodes don't: halves the transient native peak
+            b = BitmapFactory.decodeFile(f.getPath(), o);
+        }
         if (b == null) throw new IOException("unreadable picture");
         int tw = Math.round(bounds.outWidth * scale), th = Math.round(bounds.outHeight * scale);
         if (r.cancelled) return null;
-        if (b.getWidth() > tw * 1.1f && tw > 0 && th > 0) {
+        if (b.getWidth() > tw * 1.5f   // within 1.5x the canvas scales it when drawing: no second copy
+                && tw > 0 && th > 0) {
             Bitmap s = Bitmap.createScaledBitmap(b, tw, th, true);
             if (s != b) b.recycle();
             b = s;
