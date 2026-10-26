@@ -20,15 +20,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The home rows: up to 15 movies and 15 shows that can be played on this TV now. Candidates come from TMDB (trending
  * this week, plus recent releases on the TV's apps) and Stremio's Cinemeta (popular), are looked up on TMDB, and kept
- * only when an installed streaming app has them in the region or (Cinemeta ones) Stremio does. Fetched every 6 hours
+ * only when an installed streaming app has them in the region or (Cinemeta ones) Stremio does. Fetched once a day
  * on a background thread, saved to disk so the next start paints at once. Use it through Recs.
  */
 final class Catalog {
-    private static final long EVERY = 6 * 3600_000L, RETRY = 10 * 60_000L;
+    private static final long EVERY = 24 * 3600_000L, RETRY = 10 * 60_000L;
     private static final int MAX = 15, CANDIDATES = 40, CHUNK = 8, CACHE_VERSION = 1;
     private static final String CINEMETA = "https://v3-cinemeta.strem.io/catalog/";
 
@@ -102,7 +104,7 @@ final class Catalog {
         return s * 31L + Services.installedStamp(context);
     }
 
-    /** Fetches when the rows are older than 6 hours, empty, or the apps/region/settings changed. Cheap otherwise. */
+    /** Fetches when the rows are older than 24 hours, empty, or the apps/region/settings changed. Cheap otherwise. */
     void refreshIfStale() {
         if (!active || fetching || !Tmdb.hasKey()) return;
         long now = System.currentTimeMillis();
@@ -212,6 +214,10 @@ final class Catalog {
         }
         // Details, 4 at a time, a chunk at a time until there are enough that can be played.
         List<Title> out = new ArrayList<>();
+        // Every detail runs on its own thread: a dead network fails all of them, so count that
+        // separately from titles TMDB skips (null) or the TV can't play.
+        final AtomicInteger tried = new AtomicInteger(), failed = new AtomicInteger();
+        final AtomicReference<String> lastProblem = new AtomicReference<>("");
         for (int from = 0; from < order.size() && out.size() < MAX; from += CHUNK) {
             List<Candidate> chunk = order.subList(from, Math.min(order.size(), from + CHUNK));
             Title[] done = new Title[chunk.size()];
@@ -220,9 +226,12 @@ final class Catalog {
                 final int slot = i;
                 final Candidate x = chunk.get(i);
                 jobs.add(() -> {
+                    tried.incrementAndGet();
                     try {
                         done[slot] = fetch(x, kind, c);
                     } catch (Exception e) {
+                        failed.incrementAndGet();
+                        lastProblem.set(e.getMessage() == null ? e.toString() : e.getMessage());
                         if (!c.isCancelled()) AppLog.w("rows: title " + x.id + ": " + e.getMessage());
                     }
                 });
@@ -231,7 +240,10 @@ final class Catalog {
             if (c.isCancelled()) throw new IOException("cancelled");
             for (Title t : done) if (t != null && t.playable() && out.size() < MAX) out.add(t);
         }
-        if (out.isEmpty() && !order.isEmpty()) throw new IOException(Recs.NO_APPS);
+        if (out.isEmpty() && !order.isEmpty()) {
+            if (tried.get() > 0 && failed.get() == tried.get()) throw new IOException(lastProblem.get());
+            throw new IOException(Recs.NO_APPS);
+        }
         return out;
     }
 
@@ -370,7 +382,7 @@ final class Catalog {
     }
 
     /** A title in a row that was looked up gets the new instance (and the file is rewritten). */
-    private void replaceInRows(Title n) {
+    private synchronized void replaceInRows(Title n) {
         boolean changed = false;
         for (int pass = 0; pass < 2; pass++) {
             List<Title> list = pass == 0 ? movies : shows;
@@ -434,7 +446,7 @@ final class Catalog {
 
     // MARK: - Disk
 
-    private void save() {
+    private synchronized void save() {
         try {
             JSONArray m = new JSONArray(), s = new JSONArray();
             for (Title t : movies) m.put(t.toJson());
