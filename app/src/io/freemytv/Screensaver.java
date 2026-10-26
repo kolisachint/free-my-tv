@@ -13,6 +13,11 @@ public class Screensaver extends DreamService {
     @Override public void onAttachedToWindow() {
         super.onAttachedToWindow();
         Watchdog.install(this);
+        if (Watchdog.crashedTooOften(this)) {
+            // Same crash-loop guard as HomeActivity: don't draw again while the original home comes back.
+            finish();
+            return;
+        }
         Ui.init(this);
         setInteractive(false);
         setFullscreen(true);

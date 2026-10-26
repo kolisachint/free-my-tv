@@ -195,16 +195,19 @@ final class Images {
             if (lock == null) LOCKS.put(r.url, lock = new Object());
         }
         boolean fetched = false;
-        synchronized (lock) {   // one download per URL; the other sizes wait, then decode the file
-            try {
+        try {
+            synchronized (lock) {   // one download per URL; the other sizes wait, then decode the file
                 if (!f.exists() || f.length() == 0) {
                     if (r.cancelled) return null;
                     r.net = new Net.Cancel();
                     Net.download(r.url, f, r.net);
                     fetched = true;
                 }
-            } finally {
-                synchronized (LOCKS) { LOCKS.remove(r.url); }
+            }
+        } finally {
+            // Outside synchronized(lock): nesting it inside deadlocks with a thread waiting on LOCKS.
+            synchronized (LOCKS) {
+                if (LOCKS.get(r.url) == lock) LOCKS.remove(r.url);
             }
         }
         if (fetched) {
