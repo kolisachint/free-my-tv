@@ -176,7 +176,7 @@ final class Tmdb {
                     String[] store = Services.store(c, id);
                     pr.appKey = store == null ? "" : store[1];
                     pr.pkg = store == null ? null : store[2];
-                    pr.name = raw.replaceAll(" (with Ads|Amazon Channel)$", "").trim();
+                    pr.name = STORE_SUFFIX.matcher(raw).replaceAll("").trim();
                 }
                 // One line per app and kind: "Prime Video" and "Amazon Video" in the same group are one app.
                 boolean dup = false;
@@ -191,6 +191,20 @@ final class Tmdb {
     private static String sameApp(Title.Provider p) {
         return p.appKey.isEmpty() ? "name:" + p.name : p.appKey;
     }
+
+    /** One PackageManager hit per package per refresh, shared by every title (Services remembers them too). */
+    private static boolean known(Context c, java.util.Map<String, Boolean> have, String pkg) {
+        Boolean b = have.get(pkg);
+        if (b == null) {
+            b = Services.installed(c, pkg);
+            have.put(pkg, b);
+        }
+        return b;
+    }
+
+    /** Store names on TMDB ("Prime Video", "Apple TV Store") have no suffix on the TV's app. */
+    private static final java.util.regex.Pattern STORE_SUFFIX =
+            java.util.regex.Pattern.compile(" (with Ads|Amazon Channel)$");
 
     /** Sets `installed` on every provider (and Stremio's flag stays as it is) and puts the installed ones first in each kind. */
     static void refreshInstalled(Context c, Title t) {
@@ -218,7 +232,7 @@ final class Tmdb {
         for (Title.Provider p : t.providers) {
             if (p.installed || p.pkg == null) continue;
             for (String[] s : Services.TABLE) {
-                if (s[1].equals(p.appKey) && Services.installed(c, s[2])) {
+                if (s[1].equals(p.appKey) && known(c, have, s[2])) {
                     p.pkg = s[2];
                     p.installed = true;
                     break;
@@ -226,7 +240,7 @@ final class Tmdb {
             }
             if (p.installed) continue;
             for (String[] s : Services.STORES) {
-                if (s[1].equals(p.appKey) && Services.installed(c, s[2])) {
+                if (s[1].equals(p.appKey) && known(c, have, s[2])) {
                     p.pkg = s[2];
                     p.installed = true;
                     break;

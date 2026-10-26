@@ -445,7 +445,8 @@ final class HomeView extends View implements Choreographer.FrameCallback {
             if (!running) return;
             wake();
             data.refreshIfStale();
-            recs.refresh();
+            // Searching has the network: the rows wait until it closes.
+            if (!search.open) recs.refresh();
             if (rows.first() < 0) dirty = true;   // the empty-state message may have changed
             checkNotices();
             checkNight(true);
