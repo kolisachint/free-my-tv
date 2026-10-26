@@ -115,9 +115,16 @@ final class Launch {
      */
     /** The app's own search page for the title, where one is known to open (verified on device). */
     static String appSearchUrl(String pkg, String title) {
-        if (!"com.google.android.youtube.tv".equals(pkg)) return null;
+        String path;
+        if ("com.google.android.youtube.tv".equals(pkg)) {
+            path = "https://www.youtube.com/results?search_query=";
+        } else if ("in.startv.hotstar".equals(pkg)) {
+            path = "https://www.hotstar.com/in/search?q=";   // JioHotstar (Watchmode India has no Hotstar)
+        } else {
+            return null;
+        }
         try {
-            return "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(title, "UTF-8");
+            return path + java.net.URLEncoder.encode(title, "UTF-8");
         } catch (java.io.UnsupportedEncodingException e) {
             return null;
         }
