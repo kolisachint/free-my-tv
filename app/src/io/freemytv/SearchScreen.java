@@ -171,6 +171,13 @@ final class SearchScreen {
         setQuery(text, true);
     }
 
+    /** No speech recognizer on the TV: the cursor goes to the field so the person types instead. */
+    void focusField() {
+        area = FIELD;
+        retarget();
+        home.wake();
+    }
+
     /** The one way the query changes (keys, hardware keyboard, voice, chips): schedules the search (now, or after 300 ms). */
     private void setQuery(String text, boolean now) {
         query = text.length() > 40 ? text.substring(0, 40) : text;

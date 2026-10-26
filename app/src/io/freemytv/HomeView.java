@@ -3,6 +3,7 @@ package io.freemytv;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.app.Activity;
 import android.app.ActivityOptions;
+import android.app.SearchManager;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.ComponentName;
@@ -40,6 +41,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -923,6 +925,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
             activity.startActivityForResult(i, REQ_VOICE);
         } catch (ActivityNotFoundException | SecurityException e) {
             voiceAsked = false;
+            if (search.open) search.focusField();   // no recognizer: type instead
             showToast(Ui.tr("Voice search isn't available on this TV."));
         }
     }
@@ -950,13 +953,67 @@ final class HomeView extends View implements Choreographer.FrameCallback {
         return null;
     }
 
-    /** What was said: search opens with it, and the focus goes to the first result. */
+    /** What was said: an "open/play" command launches the app, anything else searches with the transcript. */
     void onVoice(String text) {
         voiceAsked = false;
         if (text == null || text.trim().isEmpty()) return;
+        if (handleVoiceCommand(text.trim())) {
+            if (search.open) closeSearch();
+            return;
+        }
         if (details.open) details.close(false);
         if (!search.open) openSearch();
         search.voice(text.trim());
+    }
+
+    /**
+     * "Open Netflix", "Play Panchayat on Netflix": launches the installed app (the title in the app's own search
+     * when the command names both, else the app's home). Anything else is not a command (false: the transcript
+     * searches, as before). No new permissions, no recognizer changes.
+     */
+    private boolean handleVoiceCommand(String text) {
+        String lower = text.toLowerCase(Locale.ROOT);
+        String rest = null;
+        if (lower.startsWith("play ")) rest = text.substring(5).trim();
+        else if (lower.startsWith("open ")) rest = text.substring(5).trim();
+        if (rest == null || rest.isEmpty()) return false;
+        String restLower = rest.toLowerCase(Locale.ROOT);
+        int sep = restLower.lastIndexOf(" on ");
+        if (sep < 0) sep = restLower.lastIndexOf(" in ");
+        String titlePart, appPart;
+        if (sep >= 0) {
+            titlePart = rest.substring(0, sep).trim();
+            appPart = rest.substring(sep + 4).trim();
+        } else {
+            titlePart = rest;
+            appPart = null;
+        }
+        List<Search.AppMatch> apps = Search.apps(activity, appPart != null ? appPart : titlePart);
+        if (apps.isEmpty()) return false;
+        if (appPart != null) {
+            if (!titlePart.isEmpty()) return searchInApp(apps.get(0), titlePart);
+            return Launch.app(activity, apps.get(0).pkg, null);
+        }
+        // Bare "Open <app>": only when the words are the app itself, so "Play Panchayat" still searches.
+        for (Search.AppMatch a : apps) {
+            if (a.label.equalsIgnoreCase(titlePart) || Fuzzy.norm(a.label).equals(Fuzzy.norm(titlePart))) {
+                return Launch.app(activity, a.pkg, null);
+            }
+        }
+        return false;
+    }
+
+    /** The title in the app's own search (its home when the app takes no query). */
+    private boolean searchInApp(Search.AppMatch target, String title) {
+        Intent i = new Intent(Intent.ACTION_SEARCH).setPackage(target.pkg)
+                .putExtra(SearchManager.QUERY, title).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            activity.startActivity(i);
+            return true;
+        } catch (ActivityNotFoundException | SecurityException e) {
+            AppLog.w("voice search in " + target.pkg + ": " + e.getClass().getSimpleName());
+        }
+        return Launch.app(activity, target.pkg, null);
     }
 
     private void openSearch() {
