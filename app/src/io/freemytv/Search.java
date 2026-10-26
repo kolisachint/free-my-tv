@@ -8,12 +8,18 @@ import org.json.JSONObject;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Search: TMDB's /search/multi (movies and shows, en-US, your region, no adult titles) plus the apps on the TV whose
  * name matches. The caller debounces (~300 ms after the last key). A new query() cuts the one still running.
- * Titles are best first; the top 5 carry their ways to watch (the rest are filled by Recs.details when opened).
+ * Titles are best first: all 10 summaries land at once, the top 3 carry their ways to watch a moment later (a
+ * second partial Result), the rest when no newer query is pending (the final Result; Recs.details fills any gap
+ * left by a cut-off query when a title is opened). The last 20 /search/multi answers are cached, so retyping is
+ * instant and never touches the network.
  */
 final class Search {
     private Search() {}
@@ -30,7 +36,7 @@ final class Search {
 
     static final class Result {
         String query = "";
-        List<Title> titles = new ArrayList<>();     // at most 9, best first
+        List<Title> titles = new ArrayList<>();     // at most 10, best first
         List<AppMatch> apps = new ArrayList<>();    // best first
         boolean partial;                            // titles are in but their ways to watch are still coming (a final Result follows)
         boolean failed;                             // the network or TMDB failed (titles is empty then)
@@ -38,13 +44,17 @@ final class Search {
 
     interface Callback { void onResult(Result result); }
 
-    private static final int MAX_TITLES = 9, DETAILED = 5;
+    private static final int MAX_TITLES = 10, DETAILED = 3, CACHE_SIZE = 20;
     private static int generation;
     private static Net.Cancel running;
+    // The last /search/multi answers by exact query (raw JSON, memory only): retyping never hits the network.
+    private static final LinkedHashMap<String, String> MULTI = new LinkedHashMap<String, String>(32, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<String, String> e) { return size() > CACHE_SIZE; }
+    };
 
     /**
      * Runs the search in the background and calls `cb` on the main thread, unless a newer query() or cancel() came
-     * first (then never). Fewer than 2 letters: answers at once with only app matches, no network.
+     * first (then never). Fewer than 3 letters: answers at once with only app matches, no network.
      */
     static synchronized void query(Context c, String q, Callback cb) {
         final Context app = c.getApplicationContext();
@@ -52,18 +62,20 @@ final class Search {
         final int mine = ++generation;
         if (running != null) running.cancel();
         final Net.Cancel cancel = running = new Net.Cancel();
-        if (text.length() < 2 || !Tmdb.hasKey()) {
+        if (text.length() < 3 || !Tmdb.hasKey()) {
             Work.io(() -> {   // the package list is read off the main thread
+                if (cancel.isCancelled()) return;
                 Result r = new Result();
                 r.query = text;
                 r.apps = apps(app, text);
-                r.failed = !Tmdb.hasKey() && text.length() >= 2;
+                r.failed = !Tmdb.hasKey() && text.length() >= 3;
                 Work.MAIN.post(() -> { if (current(mine)) cb.onResult(r); });
             });
             return;
         }
-        // Its own thread: the shared io threads can be busy with the home's rows for a long time.
-        Thread th = new Thread(() -> {
+        // One shared io job (never a thread per query): a newer query() cancels this one before it starts or mid-flight.
+        Work.io(() -> {
+            if (cancel.isCancelled()) return;
             Result r = new Result();
             r.query = text;
             r.apps = apps(app, text);
@@ -83,9 +95,7 @@ final class Search {
             }
             if (cancel.isCancelled()) return;
             Work.MAIN.post(() -> { if (current(mine)) cb.onResult(r); });
-        }, "fmtv-search");
-        th.setDaemon(true);
-        th.start();
+        });
     }
 
     /** Cuts the running query (the search screen closed). */
@@ -99,9 +109,24 @@ final class Search {
         return g == generation;
     }
 
-    private static List<Title> titles(Context c, String text, Net.Cancel cancel, java.util.function.Consumer<List<Title>> early) throws Exception {
-        JSONArray found = Tmdb.get("/search/multi?query=" + URLEncoder.encode(text, "UTF-8") + "&language=" + Tmdb.LANG
-                + "&region=" + Tmdb.REGION + "&include_adult=false&page=1", cancel).getJSONArray("results");
+    /**
+     * The ranked titles (best first). Publishes twice through `early`: all summaries at once, then the top 3 with
+     * their ways to watch; the rest are detailed only when no newer query is pending (the caller drops a cut-off
+     * result, and Recs.details fills any gap when a title is opened). The /search/multi answer is cached per
+     * query, so retyping never touches the network.
+     */
+    private static List<Title> titles(Context c, String text, Net.Cancel cancel, Consumer<List<Title>> early) throws Exception {
+        JSONObject resp;
+        String cached;
+        synchronized (Search.class) { cached = MULTI.get(text); }
+        if (cached != null) {
+            resp = new JSONObject(cached);
+        } else {
+            resp = Tmdb.get("/search/multi?query=" + URLEncoder.encode(text, "UTF-8") + "&language=" + Tmdb.LANG
+                    + "&region=" + Tmdb.REGION + "&include_adult=false&page=1", cancel);
+            synchronized (Search.class) { MULTI.put(text, resp.toString()); }
+        }
+        JSONArray found = resp.getJSONArray("results");
         final List<Title> list = new ArrayList<>();
         final List<Integer> scores = new ArrayList<>();
         for (int i = 0; i < found.length(); i++) {
@@ -125,28 +150,45 @@ final class Search {
         });
         final List<Title> top = new ArrayList<>();
         for (int i : order) if (top.size() < MAX_TITLES) top.add(list.get(i));
-        early.accept(new ArrayList<>(top));
-        // Ways to watch for the first 5 (one call each: details with providers and the IMDb id), 4 at a time.
+        early.accept(new ArrayList<>(top));   // wave 1: every summary at once
+        detailInto(c, top, 0, Math.min(DETAILED, top.size()), cancel);
+        if (cancel.isCancelled()) return top;
+        if (top.size() > DETAILED) early.accept(new ArrayList<>(top));   // wave 2: the top 3 detailed, fast
+        if (cancel.isCancelled()) return top;   // a newer query is pending: leave the rest as summaries
+        detailInto(c, top, Math.min(DETAILED, top.size()), top.size(), cancel);
+        if (cancel.isCancelled()) return top;
+        for (Title t : top) Catalog.get(c).remember(t);
+        return top;
+    }
+
+    /**
+     * Details slots [from, to): one call each (details with watch providers and the IMDb id), 4 at a time. Each
+     * job writes only its own array slot; the finished titles are copied back here, on this thread, so the fan
+     * threads never touch the published list.
+     */
+    private static void detailInto(Context c, List<Title> top, int from, int to, Net.Cancel cancel) {
+        if (from >= to) return;
+        final Title[] slots = new Title[to - from];
         List<Runnable> jobs = new ArrayList<>();
-        for (int i = 0; i < Math.min(DETAILED, top.size()); i++) {
+        for (int i = from; i < to; i++) {
             final int slot = i;
             final Title t = top.get(i);
             jobs.add(() -> {
+                if (cancel.isCancelled()) return;
                 try {
                     Title n = t.copy();
                     JSONObject o = Tmdb.get("/" + t.kind + "/" + t.tmdbId + "?language=" + Tmdb.LANG
                             + "&append_to_response=watch/providers,external_ids", cancel);
                     Tmdb.details(c, n, o);
                     n.stremio = !n.imdbId.isEmpty() && Services.stremioInstalled(c);
-                    top.set(slot, n);
+                    slots[slot - from] = n;
                 } catch (Exception e) {
                     if (!cancel.isCancelled()) AppLog.w("search: details " + t.tmdbId + ": " + e.getMessage());
                 }
             });
         }
-        Work.all(jobs);   // each job writes its own slot of the list
-        for (Title t : top) Catalog.get(c).remember(t);
-        return top;
+        Work.all(jobs);
+        for (int i = from; i < to; i++) if (slots[i - from] != null) top.set(i, slots[i - from]);
     }
 
     /** Scores within 300 of each other count as the same band (so popularity order breaks the tie). */
