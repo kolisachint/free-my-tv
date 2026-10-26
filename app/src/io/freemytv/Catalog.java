@@ -128,6 +128,8 @@ final class Catalog {
         List<Title> m = null, t = null;
         String problem = "";
         try {
+            // One scan fills the installed snapshot: the ~1k lookups below then skip PackageManager.
+            Services.installedStamp(context);
             Set<Integer> providerIds = providerIds(c);
             m = build("movie", providerIds, c);
             t = build("tv", providerIds, c);

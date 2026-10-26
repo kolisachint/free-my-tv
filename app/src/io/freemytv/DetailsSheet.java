@@ -171,7 +171,7 @@ final class DetailsSheet {
         else if (!inst.isEmpty()) app = inst.get(0).name;
         else if (t.stremio) app = "Stremio";
         btn2Enabled = app != null;
-        btn2 = app != null ? Ui.trf("Watch in {app}", "app", app) : Ui.tr("Not on your apps");
+        btn2 = app != null ? Ui.trf("Watch in {app}", "app", app) : (t.full ? Ui.tr("Not on your apps") : Ui.tr("Loading…"));
         btn2W = Math.max(250, fx.btn.measureText(btn2) + 64);
         ways.clear();
         float y = 84;
@@ -179,7 +179,8 @@ final class DetailsSheet {
         String[] names = {Ui.tr("Stream"), Ui.tr("Rent"), Ui.tr("Buy")};
         for (int g = 0; g < 3; g++) {
             boolean head = false;
-            for (int pass = 0; pass < 2; pass++) {
+            // Pass 1 (the dimmed "Not installed" rows) waits for the full details: no verdicts while loading.
+            for (int pass = 0; pass < (t.full ? 2 : 1); pass++) {
                 for (Title.Provider p : t.providers) {
                     if (!kinds[g].equals(p.kind) || p.installed != (pass == 0)) continue;
                     if (!head) {
