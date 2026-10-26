@@ -16,7 +16,7 @@ import java.util.List;
 /**
  * The search screen (the mock's search.js): the query field and a mic chip on top, an on-screen keyboard on the left and
  * the results on the right as a vertical list of large tiles (the first is the "Best match"; apps are compact tiles at the
- * end). Live results from 2 letters with a 300 ms pause (Search.query, the one before cancelled). Before typing: your last
+ * end). Live results from 3 letters with a 300 ms pause (Search.query, the one before cancelled). Before typing: your last
  * 5 searches and what is trending.
  */
 final class SearchScreen {
@@ -169,7 +169,6 @@ final class SearchScreen {
     void voice(String text) {
         focusFirst = true;
         setQuery(text, true);
-        Prefs.addRecentSearch(query.trim());
     }
 
     /** The one way the query changes (keys, hardware keyboard, voice, chips): schedules the search (now, or after 300 ms). */
@@ -177,7 +176,9 @@ final class SearchScreen {
         query = text.length() > 40 ? text.substring(0, 40) : text;
         shown = Fx.fit(query, fx.sq, 1040);
         home.handler().removeCallbacks(run);
-        if (query.trim().length() >= 2) {
+        // 3+ letters search the network; 1-2 letters match only apps on the TV (Search.query answers
+        // those without touching /search/multi).
+        if (query.trim().length() >= 1) {
             state = LOADING;
             notice = "";
             if (!hasLast) layoutResults(null);   // nothing to keep on screen: show "Searching\u2026"
@@ -194,7 +195,7 @@ final class SearchScreen {
 
     private void runQuery() {
         final String asked = query.trim();
-        if (asked.length() < 2) return;
+        if (asked.length() < 1) return;
         state = LOADING;
         Search.query(home.context(), asked, result -> {
             if (!open || !asked.equals(query.trim())) return;
@@ -202,7 +203,7 @@ final class SearchScreen {
             state = result.partial ? LOADING : DONE;
             notice = result.failed ? Ui.tr("Can't search right now. Check the internet.") : "";
             layoutResults(result);
-            if (!result.partial && !result.failed && (!result.titles.isEmpty() || !result.apps.isEmpty())) Prefs.addRecentSearch(asked);
+            if (!result.partial && !result.failed && asked.length() >= 3 && (!result.titles.isEmpty() || !result.apps.isEmpty())) Prefs.addRecentSearch(asked);
             if (focusFirst && (!result.titles.isEmpty() || !result.apps.isEmpty())) {
                 focusFirst = false;
                 area = RESULTS;
@@ -230,11 +231,11 @@ final class SearchScreen {
         labels.clear();
         chipRows.clear();
         int len = query.trim().length();
-        if (len < 2) {
+        if (len < 3 && (r == null || (r.titles.isEmpty() && r.apps.isEmpty()))) {
             mode = MODE_IDLE;
             float y = 0;
             if (len == 1) {
-                note(Ui.tr("Type 2 or more letters to search."), 0);
+                note(Ui.tr("Type 3 or more letters to search."), 0);
                 y = 60;
             }
             label(Ui.tr("Recent searches"), y, 0);
@@ -457,8 +458,7 @@ final class SearchScreen {
             }
         } else if (resRow < chipRows.size() && resIdx < chipRows.get(resRow).size()) {
             String text = chipRows.get(resRow).get(resIdx).text;
-            Prefs.addRecentSearch(text);
-            setQuery(text, true);
+            setQuery(text, true);   // saved to recents by runQuery, but only if the search works and finds something
         }
     }
 
