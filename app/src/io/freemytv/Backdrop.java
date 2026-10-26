@@ -242,19 +242,12 @@ final class Backdrop {
         return px;
     }
 
-    /** Halved at each step (a true average, no aliasing), then blurred (box passes of radius r). */
+    /** down to w x h (the card path: no step jumps more than 2x), then blurred (box passes of radius r). */
     private static int[] reduce(Bitmap full, int w, int h, int radius, int passes) {
-        Bitmap b = full;
-        while (b.getWidth() / 2 >= w * 1.5f) {
-            Bitmap half = Bitmap.createScaledBitmap(b, b.getWidth() / 2, b.getHeight() / 2, true);
-            if (b != full) b.recycle();
-            b = half;
-        }
-        Bitmap small = Bitmap.createScaledBitmap(b, w, h, true);
-        if (b != full) b.recycle();
+        Bitmap small = Ui.downscale(full, w, h);
         int[] px = new int[w * h];
         small.getPixels(px, 0, w, 0, 0, w, h);
-        small.recycle();
+        if (small != full) small.recycle();
         int[] tmp = new int[px.length];
         for (int pass = 0; pass < passes; pass++) {
             box(px, tmp, w, h, radius, true);
@@ -286,20 +279,23 @@ final class Backdrop {
         }
     }
 
-    /** Average luminance (0 to 1) of a rectangle given as fractions of the image, by sampling. */
+    /** Average luminance (0 to 1) of a rectangle given as fractions of the image: one getPixels, then sample. */
     private static float luminance(Bitmap b, float x0, float y0, float x1, float y1) {
+        int[] xs = new int[32], ys = new int[24];
+        int w = b.getWidth(), h = b.getHeight();
+        for (int i = 0; i < 32; i++) xs[i] = Math.round((x0 + (x1 - x0) * (i + 0.5f) / 32) * (w - 1));
+        for (int j = 0; j < 24; j++) ys[j] = Math.round((y0 + (y1 - y0) * (j + 0.5f) / 24) * (h - 1));
+        int bw = xs[31] - xs[0] + 1, bh = ys[23] - ys[0] + 1;
+        int[] px = new int[bw * bh];
+        b.getPixels(px, 0, bw, xs[0], ys[0], bw, bh);
         float sum = 0;
-        int count = 0;
         for (int j = 0; j < 24; j++) {
             for (int i = 0; i < 32; i++) {
-                int x = Math.round((x0 + (x1 - x0) * (i + 0.5f) / 32) * (b.getWidth() - 1));
-                int y = Math.round((y0 + (y1 - y0) * (j + 0.5f) / 24) * (b.getHeight() - 1));
-                int p = b.getPixel(x, y);
+                int p = px[(ys[j] - ys[0]) * bw + (xs[i] - xs[0])];
                 sum += (0.2126f * ((p >> 16) & 255) + 0.7152f * ((p >> 8) & 255) + 0.0722f * (p & 255)) / 255f;
-                count++;
             }
         }
-        return sum / count;
+        return sum / 768;
     }
 
     private static int black(float a) {
