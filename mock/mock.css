@@ -310,6 +310,10 @@ html.ovmode, body.ovmode { overflow-y: auto; overflow-x: hidden; height: auto; }
 .skey .ring { left: -9px; top: -9px; }
 .skey.focus { background: #FFF; color: #1D1D1F; -webkit-transform: scale(1.1); transform: scale(1.1); z-index: 3; }
 .sres { position: absolute; left: 720px; top: 190px; width: 1104px; height: 880px; }
+/* The recognizer overlay holds the top while listening: the screen ducks down under it. */
+.search-duck .sfield, .search-duck .smic { top: 180px; }
+.search-duck .skb { top: 336px; }
+.search-duck .sres { top: 330px; }
 .sres .rlabel { width: 900px; }
 .snote { position: absolute; left: 0; height: 40px; line-height: 40px; width: 1000px; font-size: 30px; font-weight: 500; color: #3A3A3F; }
 .night .snote { color: #D8D8DC; }

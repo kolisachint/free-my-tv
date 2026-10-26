@@ -51,7 +51,7 @@ final class Launch {
         Work.io(() -> {
             String link = Recs.get(app).watchLink(t, appKey, appPkg);   // cached; the first time, Watchmode (if configured)
             Work.MAIN.post(() -> {
-                boolean ok = viewOrLaunch(app, link, appPkg, options);
+                boolean ok = viewOrLaunch(app, link, appPkg, t.title, options);
                 if (ok) History.record(t, appKey);
                 if (done != null) done.onDone(ok);
             });
@@ -61,13 +61,13 @@ final class Launch {
     /** Opens the title's page in Stremio (stremio:///detail/...), else Stremio itself. Needs the IMDb id. */
     static boolean openStremio(Context c, Title t, Bundle options) {
         String link = t.imdbId.isEmpty() ? "" : ContinueItem.stremioLink(t.stremioKind(), t.imdbId, "");
-        return viewOrLaunch(c, link, Services.STREMIO_PKG, options);
+        return viewOrLaunch(c, link, Services.STREMIO_PKG, t.title, options);
     }
 
     /** Resumes a Continue card: Stremio's deep link, or the title in the app it was opened in (the app's home if unknown). */
     static boolean open(Context c, ContinueItem item, Bundle options) {
         if (item.pkg.isEmpty()) return false;
-        return viewOrLaunch(c.getApplicationContext(), item.deepLink, item.pkg, options);
+        return viewOrLaunch(c.getApplicationContext(), item.deepLink, item.pkg, item.title, options);
     }
 
     /** The trailer: the YouTube TV app on the video, else YouTube's search for "<title> <year> trailer". */
@@ -103,9 +103,19 @@ final class Launch {
 
     // MARK: - Plumbing
 
-    /** `link` in `pkg` if there is one and the app takes it, else the app's launch screen. */
+    /** `link` in `pkg` if there is one and the app takes it, else the app's own launch screen. */
     private static boolean viewOrLaunch(Context c, String link, String pkg, Bundle options) {
+        return viewOrLaunch(c, link, pkg, "", options);
+    }
+
+    /**
+     * The title's page when its address is known (Watchmode/Stremio link), else the app's own search for the
+     * title (one click from the title in most TV apps), else the app's home. Exact title pages aren't possible
+     * from TMDB data alone, so the in-app search is the permanent middle ground.
+     */
+    private static boolean viewOrLaunch(Context c, String link, String pkg, String title, Bundle options) {
         if (link != null && !link.isEmpty() && view(c, link, pkg, options)) return true;
+        if (title != null && !title.isEmpty() && searchInApp(c, pkg, title, options)) return true;
         return launchApp(c, pkg, options);
     }
 
@@ -113,6 +123,14 @@ final class Launch {
         Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(uri)).addCategory(Intent.CATEGORY_BROWSABLE)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         if (pkg != null) i.setPackage(pkg);
+        return start(c, i, options);
+    }
+
+    /** The app's own search for the title (Netflix, Prime Video, YouTube…): false when it takes no search. */
+    private static boolean searchInApp(Context c, String pkg, String title, Bundle options) {
+        Intent i = new Intent(Intent.ACTION_SEARCH).setPackage(pkg)
+                .putExtra(android.app.SearchManager.QUERY, title)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return start(c, i, options);
     }
 

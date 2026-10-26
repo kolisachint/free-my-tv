@@ -24,6 +24,8 @@ final class SearchScreen {
     private static final int IDLE = 0, LOADING = 1, DONE = 2;
     private static final int MODE_IDLE = 0, MODE_EMPTY = 1, MODE_LIST = 2;
     private static final float RX = 720, RY = 190, TILE_W = 1104, TILE_H = 340, APP_H = 120, GAP = 32;
+    /** How far the screen ducks down while the recognizer overlay holds the top. */
+    private static final float VOICE_DY = 220;
     private static final long DEBOUNCE_MS = 300;
 
     private static final class Key {
@@ -476,6 +478,9 @@ final class SearchScreen {
         if (a <= 0.002f) return;
         int layer = -1;
         if (a < 0.999f) layer = c.saveLayerAlpha(0, 0, 1920, 1080, Math.round(255 * a));
+        // The recognizer's overlay takes the top while listening: the whole screen ducks down under it.
+        boolean duck = home.voiceActive();
+        if (duck) { c.save(); c.translate(0, VOICE_DY); }
         // Field and mic chip
         fx.glass(c, 96, 40, 1276, 136, 48, 1);
         fx.magnifier(c, 152, 90, fx.ink());
@@ -514,6 +519,7 @@ final class SearchScreen {
         c.translate(RX, RY);
         results(c);
         c.restore();
+        if (duck) c.restore();
         if (layer >= 0) c.restoreToCount(layer);
     }
 

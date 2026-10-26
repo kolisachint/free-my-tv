@@ -115,6 +115,7 @@ function renderField() {
     E('span', 'caret', q);
   }
   micEl.querySelector('.mlab').textContent = MIC ? 'Listening\u2026' : 'Mic';
+  stage.classList.toggle('search-duck', MIC);
 }
 function typeKey(v) {
   if (MIC) cancelMic();

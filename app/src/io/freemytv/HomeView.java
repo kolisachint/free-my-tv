@@ -192,6 +192,9 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     private boolean okDown, backDown;
     private boolean voiceAsked;
 
+    /** The recognizer overlay is up: the search screen ducks down so it keeps the top. */
+    boolean voiceActive() { return voiceAsked; }
+
     // Debug overlay (MENU three times, or the "debug" preference): bitmaps held, cache size and frame times.
     private boolean debug;
     private int menuPresses;
