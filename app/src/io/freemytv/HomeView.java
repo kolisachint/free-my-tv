@@ -977,7 +977,17 @@ final class HomeView extends View implements Choreographer.FrameCallback {
         }
         if (details.open) details.close(false);
         if (!search.open) openSearch();
-        search.voice(text.trim());
+        // "X on TV" means our own search for X: drop the tail before searching.
+        String query = text.trim();
+        String lower = query.toLowerCase(Locale.ROOT);
+        for (String tail : new String[] {" on tv", " in tv", " on the tv", " in the tv",
+                " on free my tv", " in free my tv", " on freemytv", " in freemytv"}) {
+            if (lower.endsWith(tail) && query.length() > tail.length()) {
+                query = query.substring(0, query.length() - tail.length()).trim();
+                break;
+            }
+        }
+        search.voice(query.isEmpty() ? text.trim() : query);
     }
 
     /**
