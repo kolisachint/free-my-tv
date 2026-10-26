@@ -279,11 +279,11 @@
 
   // MARK: - Focus
 
-  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang'};
-  var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0};
+  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', SEARCH: 'search'};
+  var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0, srow: 0};
   var cards = [];
 
-  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG; }
+  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.SEARCH; }
 
   function updateFocus() {
     var i, list;
@@ -309,6 +309,7 @@
     focusRows($('settings'), st.row, st.zone === Z.SETTINGS);
     focusRows($('shelfedit'), st.edit, st.zone === Z.EDIT);
     focusRows($('langpick'), st.lang, st.zone === Z.LANG);
+    focusRows($('search'), st.srow, st.zone === Z.SEARCH);
     if (langHint) langHint.textContent = (st.lang + 1) + ' / ' + languageChoices().length + '  ·  ' + tr('OK picks, Back cancels.');
     setClass(body, 'drawer-open', st.zone === Z.DRAWER);
   }
@@ -517,6 +518,7 @@
       drawerItems.push({label: x.label || tr('Live TV'), symbol: x.symbol, off: !x.connected, run: launcher(x.id, x.label)});
     }
     drawerInputs = drawerItems.length;
+    drawerItems.push({label: tr('Search'), symbol: 'search', run: openSearch});
     drawerItems.push({label: tr('All Apps'), symbol: 'apps', run: openApps});
     drawerItems.push({label: tr('Home Settings'), symbol: 'settings', run: openSettings});
     drawerItems.push({label: tr('TV Settings'), symbol: 'tv_settings', run: tvSettings});
@@ -532,7 +534,7 @@
       var item = drawerItems[k], key = el('div', 'key glass' + (item.off ? ' off' : ''), d);
       key.style.left = xPos + 'px';
       key.style.width = tw + 'px';
-      sym(item.symbol, key);
+      if (item.symbol === 'search') searchGlyph(key); else sym(item.symbol, key);
       el('div', 'label', key, item.label);
       hover(key, Z.DRAWER, k);
       xPos += tw + gap;
@@ -651,9 +653,162 @@
     setClass($('settings'), 'open', false);
     setClass($('shelfedit'), 'open', false);
     setClass($('langpick'), 'open', false);
+    setClass($('search'), 'open', false);
     langHint = null;
     st.zone = Z.SHELF;
     updateFocus();
+  }
+
+  // MARK: - Search (TMDB /search/multi, like Android: en-US, the region, no adult titles)
+
+  var searchInput = null, sQuery = '', sResults = [], sSearching = false, sFailed = false, sDeb = 0;
+
+  function shortQuery(q) { return (q || '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, ''); }
+
+  function searchRows() { return 1 + sResults.length; }
+
+  /** A magnifier where the drawer keys take their icon (there is no search PNG in symbols/). */
+  function searchGlyph(key) {
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 34 34');
+    svg.style.position = 'absolute';
+    svg.style.left = '50%';
+    svg.style.top = '33px';
+    svg.style.width = '34px';
+    svg.style.height = '34px';
+    svg.style.marginLeft = '-17px';
+    var c = document.createElementNS(ns, 'circle');
+    c.setAttribute('cx', '15');
+    c.setAttribute('cy', '15');
+    c.setAttribute('r', '8.5');
+    c.setAttribute('fill', 'none');
+    c.setAttribute('stroke', 'currentColor');
+    c.setAttribute('stroke-width', '3.5');
+    svg.appendChild(c);
+    var h = document.createElementNS(ns, 'line');
+    h.setAttribute('x1', '21.5');
+    h.setAttribute('y1', '21.5');
+    h.setAttribute('x2', '28.5');
+    h.setAttribute('y2', '28.5');
+    h.setAttribute('stroke', 'currentColor');
+    h.setAttribute('stroke-width', '3.5');
+    h.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(h);
+    key.appendChild(svg);
+  }
+
+  function openSearch() {
+    st.zone = Z.SEARCH;
+    st.srow = 0;
+    sQuery = '';
+    sResults = [];
+    sSearching = false;
+    sFailed = false;
+    renderSearch();
+    setClass($('search'), 'open', true);
+    updateFocus();
+  }
+
+  function closeSearch() {
+    clearTimeout(sDeb);
+    if (searchInput) searchInput.blur();
+    searchInput = null;
+    closeSheets();
+  }
+
+  function renderSearch() {
+    var typing = !!(searchInput && document.activeElement === searchInput);
+    var box = $('search').firstChild;
+    box.innerHTML = '';
+    searchInput = null;
+    el('div', 'title', box, tr('Search'));
+    var field = el('div', 'row', box);
+    searchInput = el('input', '', field);
+    searchInput.type = 'text';
+    searchInput.placeholder = tr('Search movies, shows and apps');
+    searchInput.value = sQuery;
+    searchInput.style.cssText = 'width:100%;background:transparent;border:0;outline:none;color:#FFF;' +
+      'font-size:30px;font-weight:600;padding:0;';
+    searchInput.oninput = function () { sQuery = searchInput.value; clearTimeout(sDeb); sDeb = setTimeout(runSearch, 300); };
+    searchInput.onclick = function () { st.srow = 0; updateFocus(); };
+    hover(field, Z.SEARCH, 0);
+    var list = el('div', 'list', box), holder = el('div', 'rows', list), q = shortQuery(sQuery), rows = 1, i;
+    if (q.length < 2) {
+      el('div', 'row dim', holder, tr('Type 2 or more letters to search.'));
+    } else if (sSearching && !sResults.length) {
+      el('div', 'row dim', holder, tr('Searching\u2026'));
+    } else if (sFailed && !sResults.length) {
+      el('div', 'row dim', holder, tr("Can't search right now. Check the internet."));
+    } else if (!sResults.length) {
+      el('div', 'row dim', holder, trf('No results for \u2018{q}\u2019.', {q: q}));
+    } else {
+      rows = sResults.length;
+      for (i = 0; i < sResults.length; i++) {
+        (function (p, n) {
+          var row = el('div', 'row', holder);
+          row.style.paddingLeft = '96px';
+          var img = el('img', '', row);
+          img.style.cssText = 'position:absolute;left:14px;top:8px;width:54px;height:54px;' +
+            'border-radius:12px;object-fit:cover;background:#222;';
+          img.src = Data.image(p.poster || p.backdrop, 'w92');
+          img.onerror = function () { if (img.parentNode) img.parentNode.removeChild(img); };
+          var t = el('span', '', row, p.title + (p.meta ? ' \u00b7 ' + p.meta : ''));
+          t.style.cssText = 'display:block;overflow:hidden;text-overflow:ellipsis;';
+          hover(row, Z.SEARCH, n + 1);
+        })(sResults[i], i);
+      }
+    }
+    list.style.height = Math.min(rows, 6) * 78 + 'px';
+    el('div', 'hint', box, tr('OK picks, Back cancels.'));
+    if (typing && searchInput) {
+      try {
+        searchInput.focus();
+        var end = searchInput.value.length;
+        if (searchInput.setSelectionRange) searchInput.setSelectionRange(end, end);
+      } catch (e) {}
+    }
+    updateFocus();
+  }
+
+  function runSearch() {
+    clearTimeout(sDeb);
+    var q = shortQuery(sQuery);
+    if (q.length < 2 || st.zone !== Z.SEARCH) {
+      sResults = [];
+      sSearching = false;
+      sFailed = false;
+      if (st.zone === Z.SEARCH) renderSearch();
+      return;
+    }
+    sSearching = true;
+    sFailed = false;
+    renderSearch();
+    Data.search(q, function (err, list) {
+      if (st.zone !== Z.SEARCH || shortQuery(sQuery) !== q) return;   // closed, or a newer query runs
+      sSearching = false;
+      sFailed = !!err;
+      sResults = err ? [] : list;
+      renderSearch();
+      if (!err) {
+        for (var i = 0; i < sResults.length; i++) {
+          (function (p) {
+            Data.details(p, function () {
+              if (st.zone !== Z.SEARCH || sResults.indexOf(p) < 0) return;
+              renderSearch();
+            });
+          })(sResults[i]);
+        }
+      }
+    });
+  }
+
+  function openResult(p) {
+    if (!p) return;
+    var app = p.app ? Data.appFor(p.app) : null;
+    if (MOCKUP) { mockupOpen(p, app); return; }
+    if (app) launcher(app.id, app.title)();
+    else toast(trf("Couldn't open {app}.", {app: p.service || p.title}));
   }
 
   // MARK: - Home Settings
@@ -890,6 +1045,10 @@
       case Z.LANG:
         closeLanguages(true);
         return;
+      case Z.SEARCH:
+        if (st.srow === 0) { if (searchInput) searchInput.focus(); }
+        else openResult(sResults[st.srow - 1]);
+        return;
     }
   }
 
@@ -946,11 +1105,19 @@
       case Z.LANG:
         if (dy) st.lang = Math.max(0, Math.min(languageChoices().length - 1, st.lang + dy));
         break;
+      case Z.SEARCH:
+        if (dy) st.srow = Math.max(0, Math.min(searchRows() - 1, st.srow + dy));
+        break;
     }
     updateFocus();
   }
 
   function back() {
+    if (st.zone === Z.SEARCH) {
+      if (searchInput && document.activeElement === searchInput) { searchInput.blur(); st.srow = 0; updateFocus(); return; }
+      closeSearch();
+      return;
+    }
     if (st.zone === Z.EDIT) { setClass($('shelfedit'), 'open', false); openSettings(); st.row = rowsNow.length - 2; updateFocus(); return; }
     if (st.zone === Z.LANG) { closeLanguages(false); return; }
     if (sheetOpen()) { closeSheets(); return; }
@@ -962,7 +1129,7 @@
   /** The pointer focuses what it's over (the Magic Remote, or a mouse when previewing). */
   function hover(node, zone, index) {
     node.onmouseover = function () {
-      if (saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG))) return;
+      if (saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.SEARCH))) return;
       if (zone === Z.DRAWER && st.zone !== Z.DRAWER) return;
       if (zone !== Z.DRAWER && st.zone === Z.DRAWER && zone !== Z.SHELF) return;
       if (zone === Z.SHELF && st.zone === Z.DRAWER) closeDrawer();
@@ -1093,6 +1260,10 @@
   document.addEventListener('keydown', function (e) {
     var k = e.keyCode;
     if (poke()) { e.preventDefault(); return; }   // the first press only wakes the screen
+    if (st.zone === Z.SEARCH && searchInput && document.activeElement === searchInput) {
+      if (k === TV.keys.back || k === 27) { searchInput.blur(); st.srow = 0; updateFocus(); e.preventDefault(); }
+      return;   // typing: the TV's own keyboard takes the arrows, OK and delete
+    }
     if (k === TV.keys.left) move(-1, 0);
     else if (k === TV.keys.right) move(1, 0);
     else if (k === TV.keys.up) move(0, -1);

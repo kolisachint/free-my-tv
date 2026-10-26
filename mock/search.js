@@ -57,7 +57,7 @@ function searchData(raw) {
   INDEX.forEach(function (x) { var s = scoreHay(q, x.hay); if (s) titles.push({ it: x.it, s: s + x.it.rating / 10 }); });
   titles.sort(function (a, b) { return b.s - a.s; });
   APPS.forEach(function (a) { var t = norm(a.name); if (scoreHay(q, { t: t, tw: t.split(' '), cw: [], gw: [] })) apps.push(a); });
-  return { q: raw, titles: titles.slice(0, 9).map(function (x) { return x.it; }), apps: apps };
+  return { q: raw, titles: titles.slice(0, 10).map(function (x) { return x.it; }), apps: apps };
 }
 
 /* MARK: - Recent searches (localStorage, max 5) */

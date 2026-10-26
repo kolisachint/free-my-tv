@@ -521,6 +521,43 @@ var Data = (function () {
     return out;
   }
 
+  // MARK: - Search (TMDB /search/multi, like Android: en-US, the region, no adult titles)
+
+  var SEARCH_TTL = 24 * 3600 * 1000, SEARCH_KEEP = 30;
+  var searchCache = stored('search') || {};   // query (lowercase) -> {at, titles}
+
+  function trimSearchCache() {
+    var keys = Object.keys(searchCache);
+    if (keys.length <= SEARCH_KEEP) return;
+    keys.sort(function (a, b) { return searchCache[a].at - searchCache[b].at; });
+    for (var i = 0; i < keys.length - SEARCH_KEEP; i++) delete searchCache[keys[i]];
+  }
+
+  /** Up to 10 movies and shows for the query (cached); done(error, titles). Each takes details() for its info. */
+  function searchTitles(query, done) {
+    var q = (query || '').replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '');
+    if (q.length < 2 || !KEY) { done(null, []); return; }
+    var hit = searchCache[q.toLowerCase()];
+    if (hit && Date.now() - hit.at < SEARCH_TTL) { done(null, hit.titles.slice(0, 10)); return; }
+    tmdb('/search/multi?query=' + encodeURIComponent(q) + '&language=en-US&region=' + REGION + '&include_adult=false&page=1',
+      function (err, res) {
+        if (err) { done(err); return; }
+        var list = [], found = (res && res.results) || [];
+        for (var i = 0; i < found.length && list.length < 10; i++) {
+          var o = found[i];
+          if (o.media_type !== 'movie' && o.media_type !== 'tv') continue;
+          var title = o.media_type === 'movie' ? (o.title || o.original_title) : (o.name || o.original_name);
+          if (!o.id || !title || (!o.poster_path && !o.backdrop_path)) continue;
+          list.push({id: o.id, kind: o.media_type, title: title,
+            backdrop: o.backdrop_path || '', poster: o.poster_path || '', meta: '', app: null, service: '', detailed: false});
+        }
+        searchCache[q.toLowerCase()] = {at: Date.now(), titles: list};
+        trimSearchCache();
+        store('search', searchCache);
+        done(null, list);
+      });
+  }
+
   // MARK: - Formatting
 
   function fmt(v, digits) {
@@ -548,6 +585,8 @@ var Data = (function () {
     recsError: function () { return recsError; },
     picks: now,
     showcase: all,
+    search: searchTitles,
+    details: details,
     image: function (path, size) { return path ? 'https://image.tmdb.org/t/p/' + (size || 'w1280') + path : ''; },
 
     /** Night at the location: from sunset to sunrise (the last forecast; without one, 6:00 and 18:00). */
