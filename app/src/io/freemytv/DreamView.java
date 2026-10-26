@@ -541,11 +541,20 @@ final class DreamView extends View implements Choreographer.FrameCallback, Recs.
             Glass g = makeGlass(text, paint, right, top, scale);
             handler.post(() -> {
                 if (gen != generation || !text.equals(glassFor)) return;
+                Glass old = glass;
                 glass = g;
                 glassShader.setInputShader("slope", nearest(g.slope));
                 glassShader.setInputShader("cover", nearest(g.cover));
                 chromeDirty = true;
                 invalidate();
+                if (old != null) {
+                    // After the last frame using them; like the photo bitmaps in advance().
+                    handler.postDelayed(() -> {
+                        old.slope.recycle();
+                        old.cover.recycle();
+                        old.shadow.recycle();
+                    }, 1000);
+                }
             });
         });
     }
