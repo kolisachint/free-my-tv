@@ -81,8 +81,23 @@ final class Services {
         }
     }
 
+    /** Installed answers, filled once per refresh and shared by every title (the stamp scan below refreshes them). */
+    private static final Map<String, Boolean> INSTALLED = new HashMap<>();
+
     /** The service's app is on the TV, and the service isn't hidden (an app the TV ships without a subscription, say). */
     static boolean installed(Context c, String pkg) {
+        synchronized (INSTALLED) {
+            Boolean b = INSTALLED.get(pkg);
+            if (b == null) {
+                b = check(c, pkg);
+                INSTALLED.put(pkg, b);
+            }
+            return b;
+        }
+    }
+
+    /** One PackageManager hit, hiding nothing: the HIDDEN filter above applies. */
+    private static boolean check(Context c, String pkg) {
         if (!HIDDEN.isEmpty()) {
             for (String[] s : TABLE) if (s[2].equals(pkg) && HIDDEN.contains(s[1])) return false;
             for (String[] s : STORES) if (s[2].equals(pkg) && HIDDEN.contains(s[1])) return false;
@@ -141,9 +156,19 @@ final class Services {
 
     /** A stable string for "which known apps are installed and not hidden" (rows refetch when it changes). */
     static long installedStamp(Context c) {
+        // Fresh PackageManager answers (never the snapshot above): this scan also refreshes it for the titles.
         long stamp = 7;
-        for (String[] s : TABLE) stamp = stamp * 31L + (installed(c, s[2]) ? s[2].hashCode() : 0);
-        for (String[] s : STORES) stamp = stamp * 31L + (installed(c, s[2]) ? s[2].hashCode() : 0);
-        return stamp * 31L + (stremioInstalled(c) ? 1 : 0);
+        for (String[] s : TABLE) stamp = stamp * 31L + (remember(c, s[2]) ? s[2].hashCode() : 0);
+        for (String[] s : STORES) stamp = stamp * 31L + (remember(c, s[2]) ? s[2].hashCode() : 0);
+        return stamp * 31L + (remember(c, STREMIO_PKG) ? 1 : 0);
+    }
+
+    /** Fresh answer, remembered for the titles coming next. */
+    private static boolean remember(Context c, String pkg) {
+        boolean b = check(c, pkg);
+        synchronized (INSTALLED) {
+            INSTALLED.put(pkg, b);
+        }
+        return b;
     }
 }
