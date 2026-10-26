@@ -1027,19 +1027,9 @@ final class HomeView extends View implements Choreographer.FrameCallback {
         return false;
     }
 
-    /** The app's own search page for the title, where one is known to open (verified on device). */
-    private static String appSearchUrl(String pkg, String title) {
-        if (!"com.google.android.youtube.tv".equals(pkg)) return null;
-        try {
-            return "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(title, "UTF-8");
-        } catch (java.io.UnsupportedEncodingException e) {
-            return null;
-        }
-    }
-
     /** The title in the app's own search (its home when the app takes no query). */
     private boolean searchInApp(Search.AppMatch target, String title) {
-        String url = appSearchUrl(target.pkg, title);
+        String url = Launch.appSearchUrl(target.pkg, title);
         if (url != null) {
             try {
                 activity.startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).setPackage(target.pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));

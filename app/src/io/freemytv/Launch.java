@@ -113,9 +113,23 @@ final class Launch {
      * title (one click from the title in most TV apps), else the app's home. Exact title pages aren't possible
      * from TMDB data alone, so the in-app search is the permanent middle ground.
      */
+    /** The app's own search page for the title, where one is known to open (verified on device). */
+    static String appSearchUrl(String pkg, String title) {
+        if (!"com.google.android.youtube.tv".equals(pkg)) return null;
+        try {
+            return "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(title, "UTF-8");
+        } catch (java.io.UnsupportedEncodingException e) {
+            return null;
+        }
+    }
+
     private static boolean viewOrLaunch(Context c, String link, String pkg, String title, Bundle options) {
         if (link != null && !link.isEmpty() && view(c, link, pkg, options)) return true;
-        if (title != null && !title.isEmpty() && searchInApp(c, pkg, title, options)) return true;
+        // The in-app search only where the app takes it (verified per app on device); elsewhere the
+        // failed attempt just adds noise and delay before the home screen, so skip it there.
+        String url = title != null && !title.isEmpty() ? appSearchUrl(pkg, title) : null;
+        if (url != null && view(c, url, pkg, options)) return true;
+        if (url != null && searchInApp(c, pkg, title, options)) return true;
         return launchApp(c, pkg, options);
     }
 
@@ -146,7 +160,10 @@ final class Launch {
             c.startActivity(i, options);
             return true;
         } catch (ActivityNotFoundException | SecurityException e) {
-            AppLog.w("couldn't open " + (i.getPackage() != null ? i.getPackage() : i.getAction()) + ": " + e.getClass().getSimpleName());
+            // The package when scoped, else what was asked: tells a refused deep link from a refused search.
+            String what = i.getData() != null ? String.valueOf(i.getData()) : String.valueOf(i.getAction());
+            AppLog.w("couldn't open " + (i.getPackage() != null ? i.getPackage() + " " : "") + what
+                    + ": " + e.getClass().getSimpleName());
             return false;
         }
     }
