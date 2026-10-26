@@ -52,7 +52,7 @@ final class Launch {
             String link = Recs.get(app).watchLink(t, appKey, appPkg);   // cached; the first time, Watchmode (if configured)
             Work.MAIN.post(() -> {
                 boolean ok = viewOrLaunch(app, link, appPkg, t.title, options);
-                if (ok) History.record(t, appKey);
+                if (ok) History.record(t, appKey, link);
                 if (done != null) done.onDone(ok);
             });
         });
@@ -67,7 +67,23 @@ final class Launch {
     /** Resumes a Continue card: Stremio's deep link, or the title in the app it was opened in (the app's home if unknown). */
     static boolean open(Context c, ContinueItem item, Bundle options) {
         if (item.pkg.isEmpty()) return false;
-        return viewOrLaunch(c.getApplicationContext(), item.deepLink, item.pkg, item.title, options);
+        Context app = c.getApplicationContext();
+        if (!item.deepLink.isEmpty() || item.tmdbId == 0 || ContinueItem.SOURCE_STREMIO.equals(item.source)) {
+            return viewOrLaunch(app, item.deepLink, item.pkg, item.title, options);
+        }
+        // Made before its page was kept (or the link wasn't known then): look it up now, then open it.
+        Title t = new Title();
+        t.tmdbId = item.tmdbId;
+        t.kind = item.kind;
+        t.title = item.title;
+        Work.io(() -> {
+            String link = Recs.get(app).watchLink(t, item.source, item.pkg);   // cached; Watchmode only if needed
+            Work.MAIN.post(() -> {
+                if (link != null) History.setLink(t.tmdbId, t.kind, link);
+                viewOrLaunch(app, link, item.pkg, item.title, options);
+            });
+        });
+        return true;
     }
 
     /** The trailer: the YouTube TV app on the video, else YouTube's search for "<title> <year> trailer". */

@@ -675,6 +675,8 @@ final class Recs {
 
     // MARK: - Watchmode (the title's own page in its app; the free plan's web addresses are what the apps open)
 
+    private static final long NO_LINK_MS = 3 * 24 * 60 * 60_000L;
+
     private static String linkKey(Pick p) {
         return "wm:" + p.kind + p.id + p.app;
     }
@@ -694,7 +696,8 @@ final class Recs {
     private void findLink(Pick p) {
         if (!linksOn() || p.pkg == null || p.link != null) return;
         String saved = cache.getString(linkKey(p), null);
-        if (saved != null) {
+        // A title with no link is looked up again after NO_LINK_MS: Watchmode may not have had it the first time.
+        if (saved != null && (!saved.isEmpty() || System.currentTimeMillis() - cache.getLong(linkKey(p) + "@", 0) < NO_LINK_MS)) {
             p.link = saved.isEmpty() ? null : saved;
             return;
         }
@@ -715,7 +718,9 @@ final class Recs {
                     if (same && s.optString("type").equals("sub") && s.optString("web_url").startsWith("https://")) link = s.optString("web_url");
                 }
             }
-            cache.edit().putString(linkKey(p), link).apply();
+            SharedPreferences.Editor e = cache.edit().putString(linkKey(p), link);
+            if (link.isEmpty()) e.putLong(linkKey(p) + "@", System.currentTimeMillis());
+            e.apply();
             p.link = link.isEmpty() ? null : link;
         } catch (Exception e) {
             if ("Watchmode returned HTTP 401".equals(e.getMessage())) {

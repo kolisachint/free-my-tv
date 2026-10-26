@@ -23,6 +23,7 @@ final class History {
     static final class Entry {
         int tmdbId;
         String imdbId = "", kind = "movie", title = "", backdropPath = "", posterPath = "", appKey = "";
+        String link = "";     // the title's page in appKey's app (Watchmode), or "": the card reopens it
         int year;
         long at;
     }
@@ -32,7 +33,12 @@ final class History {
     }
 
     /** Remembers that `t` was opened in the app `appKey` just now. */
-    static synchronized void record(Title t, String appKey) {
+    static void record(Title t, String appKey) {
+        record(t, appKey, "");
+    }
+
+    /** As record(), with the title's page in the app (`link`, may be ""): the Continue card opens that page. */
+    static synchronized void record(Title t, String appKey, String link) {
         if (t == null || t.tmdbId == 0) return;
         List<Entry> list = all();
         for (int i = list.size() - 1; i >= 0; i--) if (list.get(i).tmdbId == t.tmdbId && list.get(i).kind.equals(t.kind)) list.remove(i);
@@ -45,12 +51,29 @@ final class History {
         e.backdropPath = t.backdropPath;
         e.posterPath = t.posterPath;
         e.appKey = appKey == null ? "" : appKey;
+        e.link = link == null ? "" : link;
         e.at = System.currentTimeMillis();
         list.add(0, e);
         while (list.size() > MAX) list.remove(list.size() - 1);
         write(list);
         version++;
         Catalog.get(Prefs.context()).notifyContinue();
+    }
+
+    /** Keeps the title's page for its Continue card, when it was looked up after the card was made. */
+    static synchronized void setLink(int tmdbId, String kind, String link) {
+        if (link == null || link.isEmpty()) return;
+        List<Entry> list = all();
+        boolean changed = false;
+        for (Entry e : list) {
+            if (e.tmdbId == tmdbId && e.kind.equals(kind) && !link.equals(e.link)) {
+                e.link = link;
+                changed = true;
+            }
+        }
+        if (!changed) return;
+        write(list);
+        version++;
     }
 
     /** Newest first. */
@@ -70,6 +93,7 @@ final class History {
                 e.backdropPath = o.optString("backdrop");
                 e.posterPath = o.optString("poster");
                 e.appKey = o.optString("app");
+                e.link = o.optString("link");
                 e.at = o.optLong("at");
                 out.add(e);
             }
@@ -88,7 +112,7 @@ final class History {
             JSONArray a = new JSONArray();
             for (Entry e : list) {
                 a.put(new JSONObject().put("id", e.tmdbId).put("imdb", e.imdbId).put("kind", e.kind).put("title", e.title)
-                        .put("year", e.year).put("backdrop", e.backdropPath).put("poster", e.posterPath).put("app", e.appKey).put("at", e.at));
+                        .put("year", e.year).put("backdrop", e.backdropPath).put("poster", e.posterPath).put("app", e.appKey).put("link", e.link).put("at", e.at));
             }
             sp().edit().putString("list", a.toString()).apply();
         } catch (Exception ignored) {
@@ -113,6 +137,7 @@ final class History {
             c.posterPath = e.posterPath;
             c.pkg = pkgOf(e.appKey);
             if (e.appKey.equals(Services.STREMIO) && !e.imdbId.isEmpty()) c.deepLink = ContinueItem.stremioLink(e.kind.equals("movie") ? "movie" : "series", e.imdbId, "");
+            else c.deepLink = e.link;
             out.add(c);
         }
         return out;

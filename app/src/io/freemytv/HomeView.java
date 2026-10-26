@@ -930,6 +930,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 if (voiceAsked) {
                     voiceAsked = false;
+                    activity.finishActivity(REQ_VOICE);   // the recognizer's own screen would stay up with nothing to say
                     if (search.open) search.heardNothing();
                     else showToast(Ui.tr("Didn't catch that. Try the mic again."));
                 }
