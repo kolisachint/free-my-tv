@@ -12,7 +12,6 @@ import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
-import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
@@ -202,6 +201,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     private String debugText = "";
 
     private final Paint bitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    // Color only: the blur comes from the Shadows cache at draw time, so a MaskFilter here would only allocate.
     private final Paint shadow = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint shadowDeep = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Shadows shadows;
@@ -250,7 +250,6 @@ final class HomeView extends View implements Choreographer.FrameCallback {
         pageNight = Ui.gradient(1080, 0xFF1C1C1E, 0xFF0B0B0D);
         labels();
         checkNight(false);
-        shadow.setMaskFilter(new BlurMaskFilter(SHADOW_BLUR, BlurMaskFilter.Blur.NORMAL));
         border.setStyle(Paint.Style.STROKE);
         rim.setStyle(Paint.Style.STROKE);
         gridLabel = new TextPaint(Ui.text(Ui.medium, 24, 0x99FFFFFF));
@@ -484,7 +483,6 @@ final class HomeView extends View implements Choreographer.FrameCallback {
         hero.size(k);
         clockMinute = -1;
         updateClock();
-        shadow.setMaskFilter(new BlurMaskFilter(SHADOW_BLUR * k, BlurMaskFilter.Blur.NORMAL));
         border.setStrokeWidth(2 * k);
         rim.setStrokeWidth(2.5f * k);
         gridLabel.setTextSize(24 * k);

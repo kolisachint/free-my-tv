@@ -323,7 +323,8 @@ final class DetailsSheet {
         fx.fill.setColor(Fx.alpha(0xFF000000, 0.55f * a));
         c.drawRect(0, 0, 1920, 1080, fx.fill);
         int layer = -1;
-        if (a < 0.999f) layer = c.saveLayerAlpha(0, 0, 1920, 1080, Math.round(255 * a));
+        // The dim covers the screen, but the fading content is the sheet alone: keep the layer to its bounds.
+        if (a < 0.999f) layer = c.saveLayerAlpha(PX, PY, PX + PW, PY + PH + 40, Math.round(255 * a));
         c.save();
         c.translate(PX, PY + (1 - a) * 40);
         int ni = fx.dark() ? 1 : 0;
