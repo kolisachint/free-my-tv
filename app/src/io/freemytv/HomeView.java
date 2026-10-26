@@ -926,6 +926,14 @@ final class HomeView extends View implements Choreographer.FrameCallback {
             if (target != null) i.setComponent(target);   // no "Complete action using" chooser
             voiceAsked = true;
             activity.startActivityForResult(i, REQ_VOICE);
+            // The recognizer sometimes never answers (cold speech service): stop waiting and say so.
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (voiceAsked) {
+                    voiceAsked = false;
+                    if (search.open) search.heardNothing();
+                    else showToast(Ui.tr("Didn't catch that. Try the mic again."));
+                }
+            }, 12_000);
         } catch (ActivityNotFoundException | SecurityException e) {
             voiceAsked = false;
             if (search.open) search.focusField();   // no recognizer: type instead
@@ -959,7 +967,10 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     /** What was said: an "open/play" command launches the app, anything else searches with the transcript. */
     void onVoice(String text) {
         voiceAsked = false;
-        if (text == null || text.trim().isEmpty()) return;
+        if (text == null || text.trim().isEmpty()) {
+            if (search.open) search.heardNothing();
+            return;
+        }
         if (handleVoiceCommand(text.trim())) {
             if (search.open) closeSearch();
             return;
@@ -1006,8 +1017,27 @@ final class HomeView extends View implements Choreographer.FrameCallback {
         return false;
     }
 
+    /** The app's own search page for the title, where one is known to open (verified on device). */
+    private static String appSearchUrl(String pkg, String title) {
+        if (!"com.google.android.youtube.tv".equals(pkg)) return null;
+        try {
+            return "https://www.youtube.com/results?search_query=" + java.net.URLEncoder.encode(title, "UTF-8");
+        } catch (java.io.UnsupportedEncodingException e) {
+            return null;
+        }
+    }
+
     /** The title in the app's own search (its home when the app takes no query). */
     private boolean searchInApp(Search.AppMatch target, String title) {
+        String url = appSearchUrl(target.pkg, title);
+        if (url != null) {
+            try {
+                activity.startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).setPackage(target.pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                return true;
+            } catch (ActivityNotFoundException | SecurityException e) {
+                AppLog.w("voice search page " + target.pkg + ": " + e.getClass().getSimpleName());
+            }
+        }
         Intent i = new Intent(Intent.ACTION_SEARCH).setPackage(target.pkg)
                 .putExtra(SearchManager.QUERY, title).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {

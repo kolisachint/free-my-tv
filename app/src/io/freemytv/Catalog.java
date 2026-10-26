@@ -67,6 +67,24 @@ final class Catalog {
             }
         } catch (Exception ignored) {
         }
+        if (!movies.isEmpty() || !shows.isEmpty()) {
+            // Disk never keeps installed flags or trailers: work them out before the first tap, not on it.
+            Work.io(() -> {
+                try {
+                    installedStamp = Services.installedStamp(context);
+                    for (Title t : movies) Tmdb.refreshInstalled(context, t);
+                    for (Title t : shows) Tmdb.refreshInstalled(context, t);
+                    notifyRows();
+                    Net.Cancel warm = new Net.Cancel();
+                    Title dm = movies.isEmpty() ? null : lookUp(movies.get(0), warm);
+                    if (dm != null) remember(dm);
+                    Title ds = shows.isEmpty() ? null : lookUp(shows.get(0), warm);
+                    if (ds != null) remember(ds);
+                } catch (Exception e) {
+                    AppLog.w("rows: warm " + e.getMessage());
+                }
+            });
+        }
     }
 
     void addListener(Recs.DataListener l) { listeners.add(l); }

@@ -173,6 +173,12 @@ final class SearchScreen {
         setQuery(text, true);
     }
 
+    /** The recognizer heard nothing usable: say so instead of sitting silently. */
+    void heardNothing() {
+        notice = Ui.tr("Didn't catch that. Try the mic again.");
+        home.wake();
+    }
+
     /** No speech recognizer on the TV: the cursor goes to the field so the person types instead. */
     void focusField() {
         area = FIELD;
