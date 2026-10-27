@@ -91,8 +91,9 @@ final class Launch {
         Context app = c.getApplicationContext();
         String id = t.trailerYouTubeId;
         if (!id.isEmpty()) {
-            if (view(app, "vnd.youtube:" + id, Services.YOUTUBE_PKG, options)) return true;
+            // https first: YouTube for TV takes vnd.youtube: but opens its home with it (Sony, Android 12).
             if (view(app, "https://www.youtube.com/watch?v=" + id, Services.YOUTUBE_PKG, options)) return true;
+            if (view(app, "vnd.youtube:" + id, Services.YOUTUBE_PKG, options)) return true;
             return view(app, "https://www.youtube.com/watch?v=" + id, null, options);
         }
         String q;
