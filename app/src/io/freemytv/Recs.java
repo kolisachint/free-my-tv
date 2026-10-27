@@ -456,15 +456,90 @@ final class Recs {
     private volatile int continueVersion = -1;
     private volatile long continueAt;
 
-    /** Watchmode's page address for the title in the app (cached; null without watchmode_key). Blocking: not on the main thread. */
+    /**
+     * The title's own page in the app: JustWatch first (no key, one request for all apps), then Watchmode (if keyed).
+     * Cached; null = no page known (the app's home then). Blocking: not on the main thread.
+     */
     String watchLink(Title t, String appKey, String pkg) {
+        String link = justWatchLinks(t, true).get(appKey);
+        if (link != null) {
+            AppLog.w("link " + appKey + ": JustWatch " + link);
+            return link;
+        }
         Pick p = new Pick();
         p.id = t.tmdbId;
         p.kind = t.kind;
         p.app = appKey;
         p.pkg = pkg;
         findLink(p);
+        AppLog.w("link " + appKey + ": " + (p.link != null ? "Watchmode " + p.link : "none"));
         return p.link;
+    }
+
+    /** Starts the JustWatch lookup in the background (the details sheet opened): Watch is then instant. */
+    void prefetchLinks(Title t) {
+        if (t == null || t.tmdbId == 0 || t.title.isEmpty()) return;
+        Title copy = new Title();
+        copy.tmdbId = t.tmdbId;
+        copy.kind = t.kind;
+        copy.title = t.title;
+        Work.io(() -> justWatchLinks(copy, false));
+    }
+
+    // MARK: - JustWatch (the title's page in each app; saved per title and region)
+
+    private static final long JW_FOUND_MS = 30L * 24 * 3600_000L, JW_NONE_MS = 3L * 24 * 3600_000L;
+    private final Map<String, Object> jwLocks = new HashMap<>();
+    private volatile long jwRetryAt;
+
+    private static String jwKey(Title t) {
+        return "jw:" + REGION + ":" + t.kind + t.tmdbId;
+    }
+
+    /**
+     * App key → page address for the title, from the cache (30 days; 3 days when JustWatch had nothing) or one request.
+     * A network failure isn't saved; `user` = true (Watch pressed) tries again even right after a failure.
+     */
+    private Map<String, String> justWatchLinks(Title t, boolean user) {
+        Map<String, String> out = new HashMap<>();
+        if (t.tmdbId == 0 || t.title.isEmpty() || REGION.length() != 2) return out;
+        String key = jwKey(t);
+        Object lock;
+        synchronized (jwLocks) {
+            lock = jwLocks.get(key);
+            if (lock == null) {
+                lock = new Object();
+                jwLocks.put(key, lock);
+            }
+        }
+        synchronized (lock) {
+            String saved = cache.getString(key, null);
+            long age = System.currentTimeMillis() - cache.getLong(key + "@", 0);
+            try {
+                JSONObject o = saved == null ? null : new JSONObject(saved);
+                if (o != null && age >= 0 && age < (o.length() > 0 ? JW_FOUND_MS : JW_NONE_MS)) {
+                    java.util.Iterator<String> it = o.keys();
+                    while (it.hasNext()) {
+                        String k = it.next();
+                        out.put(k, o.getString(k));
+                    }
+                    return out;
+                }
+            } catch (org.json.JSONException ignored) {
+            }
+            if (!user && System.currentTimeMillis() < jwRetryAt) return out;
+            try {
+                out = JustWatch.lookup(t, REGION, lang());
+                JSONObject o = new JSONObject();
+                for (Map.Entry<String, String> e : out.entrySet()) o.put(e.getKey(), e.getValue());
+                cache.edit().putString(key, o.toString()).putLong(key + "@", System.currentTimeMillis()).apply();
+                AppLog.w("justwatch " + t.kind + t.tmdbId + ": " + (out.isEmpty() ? "nothing" : out.keySet().toString()));
+            } catch (Exception e) {
+                jwRetryAt = System.currentTimeMillis() + 60_000L;
+                AppLog.w("justwatch: " + e.getMessage());
+            }
+            return out;
+        }
     }
 
     // MARK: - TMDB
