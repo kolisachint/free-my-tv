@@ -25,7 +25,9 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The home rows: up to 15 movies and 15 shows that can be played on this TV now. Candidates come from TMDB (trending
- * this week, plus recent releases on the TV's apps) and Stremio's Cinemeta (popular), are looked up on TMDB, and kept
+ * this week, plus recent releases on the TV's apps), Stremio's Cinemeta (popular) and, with local_languages set, recent
+ * releases in those languages on the TV's apps (every third slot: TMDB's trending is worldwide, so without them a row
+ * in India is all Hollywood). They are looked up on TMDB, and kept
  * only when an installed streaming app has them in the region or (Cinemeta ones) Stremio does. Fetched once a day
  * on a background thread, saved to disk so the next start paints at once. Use it through Recs.
  */
@@ -33,6 +35,9 @@ final class Catalog {
     private static final long EVERY = 24 * 3600_000L, RETRY = 10 * 60_000L;
     private static final int MAX = 15, CANDIDATES = 40, CHUNK = 8, CACHE_VERSION = 1;
     private static final String CINEMETA = "https://v3-cinemeta.strem.io/catalog/";
+    /** config.properties local_languages ("hi,mr"): TMDB's original-language codes, as TMDB's OR list ("hi|mr"). */
+    static final String LOCAL = Config.LOCAL_LANGUAGES.trim().toLowerCase(java.util.Locale.ROOT)
+            .replaceAll("[^a-z,|]", "").replace(',', '|').replaceAll("\\|+", "|").replaceAll("^\\||\\|$", "");
 
     private static Catalog instance;
 
@@ -119,6 +124,7 @@ final class Catalog {
     private long sourceStamp() {
         long s = Tmdb.REGION.hashCode() * 31L + keyDigest();
         s = s * 31L + (Config.HIDE_ANIMATION ? 1 : 0);
+        s = s * 31L + LOCAL.hashCode();
         return s * 31L + Services.installedStamp(context);
     }
 
@@ -192,7 +198,7 @@ final class Catalog {
     }
 
     private List<Title> build(String kind, Set<Integer> providerIds, Net.Cancel c) throws Exception {
-        List<Candidate> trending = new ArrayList<>(), cinemeta = new ArrayList<>(), recent = new ArrayList<>();
+        List<Candidate> trending = new ArrayList<>(), cinemeta = new ArrayList<>(), recent = new ArrayList<>(), local = new ArrayList<>();
         // 1. Trending this week.
         JSONArray hot = Tmdb.get("/trending/" + kind + "/week?language=" + Tmdb.LANG, c).getJSONArray("results");
         for (int i = 0; i < hot.length() && i < 20; i++) addCandidate(trending, hot.getJSONObject(i), kind);
@@ -208,6 +214,21 @@ final class Catalog {
                     : "/discover/tv?vote_count.gte=20&air_date.gte=" + day(-90) + "&air_date.lte=" + day(0) + common;
             JSONArray found = Tmdb.get(q, c).getJSONArray("results");
             for (int i = 0; i < found.length() && i < 20; i++) addCandidate(recent, found.getJSONObject(i), kind);
+            // 2b. The same in the person's own languages (local_languages, e.g. hi|mr): a lower vote floor, as these
+            //     titles get far fewer TMDB votes. A failure here only costs the local slots.
+            if (!LOCAL.isEmpty()) {
+                String lq = (kind.equals("movie")
+                        ? "/discover/movie?vote_count.gte=10&primary_release_date.gte=" + day(-365) + "&primary_release_date.lte=" + day(0)
+                        : "/discover/tv?vote_count.gte=5&air_date.gte=" + day(-90) + "&air_date.lte=" + day(0))
+                        + common + "&with_original_language=" + URLEncoder.encode(LOCAL, "UTF-8");
+                try {
+                    JSONArray mine = Tmdb.get(lq, c).getJSONArray("results");
+                    for (int i = 0; i < mine.length() && i < 20; i++) addCandidate(local, mine.getJSONObject(i), kind);
+                } catch (IOException e) {
+                    if (c.isCancelled()) throw e;
+                    AppLog.w("rows: local " + kind + ": " + e.getMessage());
+                }
+            }
         }
         // 3. Stremio's popular list (only when Stremio is on the TV): IMDb ids mapped to TMDB.
         if (Services.stremioInstalled(context)) cinemeta = cinemeta(kind, c);
@@ -216,20 +237,29 @@ final class Catalog {
         // Merge: one of each source in turn, without repeats (a title in Cinemeta is playable in Stremio wherever it came from).
         Map<Integer, Candidate> stremio = new HashMap<>();
         for (Candidate x : cinemeta) stremio.put(x.id, x);
-        List<Candidate> order = new ArrayList<>();
+        List<Candidate> mixed = new ArrayList<>();
         Set<Integer> seen = new HashSet<>();
-        for (int i = 0; i < 20 && order.size() < CANDIDATES; i++) {
+        for (Candidate x : local) seen.add(x.id);   // a local title found by the others too keeps its local slot
+        for (int i = 0; i < 20 && mixed.size() < CANDIDATES; i++) {
             for (List<Candidate> src : java.util.Arrays.asList(trending, cinemeta, recent)) {
-                if (i < src.size() && order.size() < CANDIDATES && seen.add(src.get(i).id)) {
-                    Candidate x = src.get(i);
-                    Candidate s = stremio.get(x.id);
-                    if (s != null) {
-                        x.fromStremio = true;
-                        x.imdb = s.imdb;
-                        x.imdbRating = s.imdbRating;
-                    }
-                    order.add(x);
-                }
+                if (i < src.size() && mixed.size() < CANDIDATES && seen.add(src.get(i).id)) mixed.add(src.get(i));
+            }
+        }
+        // Every third slot is a local one while they last. Titles are checked in this order and the first 15 playable
+        // kept; local ones are on the TV's apps by construction, so they almost always pass and the third holds.
+        List<Candidate> order = new ArrayList<>();
+        int li = 0, mi = 0;
+        while (order.size() < CANDIDATES && (li < local.size() || mi < mixed.size())) {
+            boolean localTurn = order.size() % 3 == 2;
+            if ((localTurn && li < local.size()) || mi >= mixed.size()) order.add(local.get(li++));
+            else order.add(mixed.get(mi++));
+        }
+        for (Candidate x : order) {
+            Candidate s = stremio.get(x.id);
+            if (s != null) {
+                x.fromStremio = true;
+                x.imdb = s.imdb;
+                x.imdbRating = s.imdbRating;
             }
         }
         // Details, 4 at a time, a chunk at a time until there are enough that can be played.

@@ -48,6 +48,8 @@ before you do it, and let them do the taps on the TV.
    refused), and until `adb tcpip 5555` runs again *Original*, the watchdog and the boot check can't reach ADB. Tell
    them before the switch (#195). Google TV's voice results for films and shows come from its home app (launcherx),
    which Free My TV mode turns off; ADB can't turn off only its home activities, so tell them before they switch.
+   The remote's mic button then fails for titles ("can't help with that"); the mic in Free My TV's own search works
+   (it listens in the app, with the microphone permission the switch grants).
    On a Mac, `adb connect` can fail with `No route to host` while the TV answers (`nc -z <IP> 5555` connects): macOS's
    Local Network privacy blocks the adb server that adb starts in the background. Start it from the same terminal
    instead (`adb kill-server; adb nodaemon server &`), or allow the terminal app under System Settings → Privacy &

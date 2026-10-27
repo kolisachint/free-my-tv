@@ -53,6 +53,7 @@ final class Config {
     static final String WATCHMODE_KEY = "$(prop watchmode_key '')";
     static final String STREMIO_AUTH_KEY = "$(prop stremio_auth_key '')";
     static final String TMDB_REGION = "$(prop tmdb_region US)";
+    static final String LOCAL_LANGUAGES = "$(prop local_languages '')";
     static final String LATITUDE = "$LAT";
     static final String LONGITUDE = "$LON";
     static final String CITY = "$(prop city '')";

@@ -29,7 +29,12 @@ The owner tests every home-screen change on a mockup **before** it goes to a TV.
 - Rows: Continue in Stremio (last 2, hidden when empty) → Movies 15 → Shows 15 → shelf (installed apps only).
 - Hero follows focus; shows installed apps only. Details sheet: trailer opens YouTube; ways to watch from TMDB
   watch providers (JustWatch data), installed first, others labeled "Not installed", Stremio last.
-- Recs: TMDB + TMDB watch providers + Stremio Cinemeta catalogs. Stremio auth token: ask once, persist, reuse.
+- Recs: TMDB + TMDB watch providers + Stremio Cinemeta catalogs, plus `local_languages` (owner: `hi,mr`) for every
+  third slot (TMDB trending is worldwide; there is no "trending in India"). Stremio auth token: ask once, persist, reuse.
+- Voice: the search mic listens in-process (`Voice.java`, `SpeechRecognizer` → katniss), needs `RECORD_AUDIO` (granted
+  over ADB by the switch). Google's recognizer screen is only the fallback: never add timers/retries around it again.
+  The remote's mic button can't be ours (Google's remote service streams it to the Assistant; no key event), and the
+  Assistant's title results need launcherx (explicit package). See `docs/sessions/2026-10-28-voice-local-picks.md`.
 - Screensaver backdrops at `w1280`, never `original`.
 - Size row counts and image sizes to the measured TV RAM (see CLAUDE.md/ADB `dumpsys meminfo`); no Rust rewrite.
 - Owner's TV (192.168.1.4, measured 2026-10-24): Sony BRAVIA VH2, Android 12, MediaTek mt5895, 4x1.8 GHz,
@@ -37,3 +42,4 @@ The owner tests every home-screen change on a mockup **before** it goes to a TV.
   UI 1920x1080 on a 4K panel. Free My TV used 47 MB PSS total (`:home` 37 MB); YouTube 312 MB, Netflix 124 MB.
   `:home` frames: 26% janky, p95 200 ms, so the bottleneck is drawing time, not RAM. Installed: Netflix, YouTube,
   Prime Video, Apple TV, Hotstar, Stremio (`com.stremio.one`).
+  Now at 192.168.1.7. Latest (2026-10-28): 0.4% janky, p50 8 ms, p99 11 ms; `:home` 71 MB PSS after scrolling.

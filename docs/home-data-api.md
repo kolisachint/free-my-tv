@@ -23,7 +23,8 @@ Texts are English. Images are never `original`: only `w300 / w500 / w780 / w1280
 | `static boolean hasKey(Context)` | A TMDB key was built in. Without it there are no rows (the old home had no purpose either). |
 
 Rows come from TMDB trending/week + recent releases on the installed apps + Stremio Cinemeta "top" (only when
-Stremio is installed), merged one of each in turn. A title stays only if an **installed** streaming app has it in
+Stremio is installed), merged one of each in turn; with `local_languages` set (e.g. `hi,mr`), every third slot is a
+recent release in those languages on the installed apps. A title stays only if an **installed** streaming app has it in
 `tmdb_region` (flatrate, free or ads) **or** it is in Cinemeta and Stremio is installed. `hide_animation` and
 `hide_services` (also `stremio`) are respected. The list is saved to `files/catalog.json`, so the first paint after a
 start is instant. `Recs` still has the old `Pick` API (`now()`, `showcase()`, `backdrop()`): only the screensaver

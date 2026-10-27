@@ -117,6 +117,7 @@ The first values come from `config.properties`, created by the first build (Goog
 |---|---|---|
 | `tmdb_key` | Your free TMDB key, for the picks | empty |
 | `tmdb_region` | Your country (two letters): which titles are on which app | `US` |
+| `local_languages` | Languages you watch (`hi,mr`, `ko`, `pt`…): a third of each row is recent titles in them on your apps | empty |
 | `watchmode_key` | Optional, free [Watchmode](https://api.watchmode.com/) key: a pick opens the title's page in its app | empty |
 | `latitude`, `longitude` | Your city, for the weather and the sunset | New York |
 | `city` | The name on the weather card | `Weather` |
@@ -166,7 +167,7 @@ To remove it for good, switch to *Original* first, then uninstall *Free My TV* (
   - on Multilaser TVs, Anoki's screen-content recognition (ACR), the store demo and the manual;
   - on KTC-made TVs (NextStar), Anoki's screen-content recognition (ACR), the store demo and the manual;
   - Google Assistant, only with `disable_assistant=true`.
-- On Google TV, the Assistant's results for films and shows come from Google TV's home app, which is off in Free My TV mode: asking it to play a show can end in "Sorry, I don't understand", and a search can show only YouTube videos. Opening apps, questions and apps' own voice search (YouTube's, for one) still work; *Original* brings it all back.
+- On Google TV, the Assistant's results for films and shows come from Google TV's home app, which is off in Free My TV mode: asking it to play a show can end in "Sorry, I don't understand", and a search can show only YouTube videos. Opening apps, questions and apps' own voice search (YouTube's, for one) still work, and so does the mic in Free My TV's own search (it listens in the app: the words show as you speak); *Original* brings it all back.
 - On TCL TVs, the remote's Netflix, YouTube and Prime buttons keep working through a small accessibility service that only reads those buttons. Pick what each one opens in *Free My TV* → *Remote Buttons*; *Original* turns the service off. On Vestel-made TVs (F&U and other store brands) and Xiaomi (Formovie) projectors the same goes for the Netflix button, and on KTC-made TVs (NextStar) for the Tabii button. On Sony TVs, the BRAVIA CORE, Netflix, Disney+, Prime Video, YouTube and Crunchyroll buttons (and Google Play, on remotes that have it) can each open the app you pick, or keep Sony's default. On Xiaomi TVs whose remote has a Mi button instead of Home, that button opens Free My TV instead of PatchWall (or, if you pick it, PatchWall as before, or another app). On Xiaomi TVs sold in Russia, the same goes for the Okko, VK, Rutube, KION, Wink and IVI buttons, which keep Xiaomi's default until you pick another app.
 - On HY300 projectors, whose stock home screen was the only way to them, the bottom drawer gets *Keystone* (keystone, zoom and projection mode) and *Screen Mirroring* (the projector's Miracast receiver), and HDMI opens through the projector's own player.
 - Picture, sound, inputs, remote pairing, Google services and the Play Store are on a protected list, checked before every change, and so are Android's own pieces and factory menus. Before anything goes off, the TV is asked whether its inputs or its remote's Input key depend on it; those stay on.
@@ -251,6 +252,8 @@ reference (fix them by hand); the others were machine-made, and corrections from
 ## Privacy
 
 No accounts, no analytics, no tracking. The app talks to TMDB, Open-Meteo (with the coordinates you set, or your time zone's main city), and Binance only when `show_crypto=true`, JustWatch for where a title streams (its TMDB id, title and your country), and Watchmode only when you set a `watchmode_key`. Your settings stay on your computer and your TV.
+
+On Google TV, the switch to Free My TV grants the app the microphone permission, for the mic in its own search. The microphone is only open while that search says *Listening…*, and what you say goes to the TV's own speech service (Google's, the same one the remote's mic button uses), never to Free My TV's authors. Without the permission, the search mic uses Google's voice screen instead.
 
 ## Credits
 
