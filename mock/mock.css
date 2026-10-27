@@ -311,9 +311,15 @@ html.ovmode, body.ovmode { overflow-y: auto; overflow-x: hidden; height: auto; }
 .skey.focus { background: #FFF; color: #1D1D1F; -webkit-transform: scale(1.1); transform: scale(1.1); z-index: 3; }
 .sres { position: absolute; left: 720px; top: 190px; width: 1104px; height: 880px; }
 /* The recognizer overlay holds the top while listening: the screen ducks down under it. */
-.search-duck .sfield, .search-duck .smic { top: 180px; }
-.search-duck .skb { top: 336px; }
-.search-duck .sres { top: 330px; }
+/* Duck by 220 px (as on Android) so the "Listening" bar at the top never covers the field, keys or results. */
+.search-duck .sfield, .search-duck .smic { top: 260px; }
+.search-duck .skb { top: 416px; }
+.search-duck .sres { top: 410px; }
+.search-duck .sclip { height: 650px; }
+.slisten { position: absolute; left: 96px; top: 40px; width: 1728px; height: 96px; line-height: 96px; border-radius: 48px; background: #1D1D1F; color: #FFF; text-align: center; font-size: 34px; font-weight: 700; z-index: 4; }
+.night .slisten { background: #F5F5F7; color: #1D1D1F; }
+/* First result: preselected, dashed ring (a shape cue, not only color). */
+.shero.pre:not(.focus) > .ring { display: block; border-style: dashed; outline: 0; }
 .sres .rlabel { width: 900px; }
 .snote { position: absolute; left: 0; height: 40px; line-height: 40px; width: 1000px; font-size: 30px; font-weight: 500; color: #3A3A3F; }
 .night .snote { color: #D8D8DC; }
@@ -334,6 +340,7 @@ html.ovmode, body.ovmode { overflow-y: auto; overflow-x: hidden; height: auto; }
 .shero .badge.inst { background: #FFF; color: #1D1D1F; }
 .shero .badge.inst .sym { -webkit-filter: brightness(0); filter: brightness(0); }
 .shero .ring { left: -9px; top: -9px; width: 1092px; height: 328px; }
+.dtile .wifi { left: 28px; top: 40px; transform: scale(1.5); transform-origin: 0 0; }
 /* vertical result list */
 .sclip { position: absolute; left: -40px; top: 0; width: 1184px; height: 800px; overflow: hidden; }
 .sstrip { position: absolute; left: 0; top: 0; width: 1184px; height: 4000px; -webkit-transition: -webkit-transform 0.15s ease-out; transition: transform 0.15s ease-out; }

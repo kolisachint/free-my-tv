@@ -101,7 +101,7 @@ function firstInstalled(it) {
 }
 
 /* MARK: - State */
-var S = { zone: 'rows', row: 0, cols: [0, 0, 0, 0], top: 0, dr: 0, dc: 0, night: false, lowram: false, det: null, hero: null, heroSlot: 0 };
+var S = { zone: 'rows', row: 0, cols: [0, 0, 0, 0], top: 0, dr: 0, dc: 0, night: false, lowram: false, det: null, hero: null, heroSlot: 0, heroPic: null, picSlot: 1, heroT: 0 };
 var rows = [], topEls = [], drawerEls = [[], []];
 
 /* MARK: - Top bar */
@@ -123,14 +123,18 @@ function buildTop() {
 }
 /* Wi-Fi: 4 signal bars (3 lit) drawn in CSS; offline = faint bars + slash, and the label says "No internet" */
 var WIFI = { name: 'Home-5G', bars: 3, off: false };
-function wifiIcon(parent) { var w = E('div', 'wifi', parent); for (var i = 0; i < 4; i++) E('i', 'wb', w); E('b', 'wslash', w); }
+function wifiIcon(parent, lit) { var w = E('div', 'wifi', parent); for (var i = 0; i < 4; i++) E('i', i < (lit || 0) ? 'wb on' : 'wb', w); E('b', 'wslash', w); return w; }
 function setWifi(off) {
   WIFI.off = off;
   var b = topEls[2]; if (!b) return;
-  var bars = b.querySelectorAll('.wb'), i;
-  for (i = 0; i < 4; i++) bars[i].className = 'wb' + (!off && i < WIFI.bars ? ' on' : '');
-  b.querySelector('.wslash').style.display = off ? 'block' : 'none';
+  paintWifi(b.querySelector('.wifi'));
   b.querySelector('.tip').textContent = off ? 'No internet' : WIFI.name;
+  if (drawerEls[1] && drawerEls[1][0]) paintWifi(drawerEls[1][0].querySelector('.wifi'));
+}
+function paintWifi(w) {
+  var bars = w.querySelectorAll('.wb'), i;
+  for (i = 0; i < 4; i++) bars[i].className = 'wb' + (!WIFI.off && i < WIFI.bars ? ' on' : '');
+  w.querySelector('.wslash').style.display = WIFI.off ? 'block' : 'none';
 }
 function topAct(i) {
   if (i === 0) { openSearch(); return; }
@@ -166,13 +170,22 @@ function recordLaunch(it, app) {
   putLaunches(l.slice(0, 20));
   refreshCont();
 }
-function agoText(at) {
-  var m = Math.max(1, Math.round((Date.now() - at) / 60000));
-  return 'Opened ' + (m < 60 ? m + ' min' : m < 1440 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + ' d') + ' ago';
+/* In memory only: titles pressed (Enter) on Movies / Shows this session, newest first. They lead the "clicked" part of Continue. */
+var CLICKED = [];
+function pushClicked(it) {
+  CLICKED = CLICKED.filter(function (x) { return x.id !== it.id; });
+  CLICKED.unshift({ id: it.id, app: firstInstalled(it), at: Date.now() });
+  refreshCont();
 }
+/* Continue: max 4 = last 2 clicked titles + last 2 Stremio in-progress, newest first. Title only on the cards. */
 function contItems() {
-  var out = [];
-  getLaunches().slice(0, 2).forEach(function (x) { var it = findItem(x.id); if (it) out.push({ item: it, launch: x, at: x.at }); });
+  var out = [], seen = {}, n = 0;
+  CLICKED.concat(getLaunches()).sort(function (a, b) { return b.at - a.at; }).forEach(function (x) {
+    var it = findItem(x.id);
+    if (!it || seen[x.id] || n >= 2) return;
+    seen[x.id] = 1; n++;
+    out.push({ item: it, launch: x, at: x.at });
+  });
   CONTINUE.slice(0, 2).forEach(function (c) { out.push({ item: SHOWS[c.index], cont: c, at: LOAD_AT - c.minsAgo * 60000 }); });
   out.sort(function (a, b) { return b.at - a.at; });
   return out.slice(0, 4);
@@ -192,19 +205,10 @@ function fillCards(d, r) {
     var c = E('div', 'card', d.strip, null, 'left:' + (96 + i * d.pitch) + 'px;width:' + d.w + 'px');
     var img = E('div', 'img', c, null, 'width:' + d.w + 'px;height:' + d.h + 'px');
     holder(img, x.item.bg.replace('/medium/', '/small/'), x.item.name);
-    if (d.kind === 'cont') {
-      E('div', 'shade', img);
-      if (x.cont) {
-        E('div', 'left', img, 'S' + x.cont.season + ' E' + x.cont.ep + ' \u00B7 ' + x.cont.minsLeft + ' min left');
-        var bar = E('div', 'bar', img); E('i', null, bar, null, 'width:' + x.cont.pct + '%');
-      }
-      E('div', 'tag', img, x.cont ? 'Stremio' : x.launch.app);
-    }
     var host2 = E('div', 'ringhost', c, null, 'width:' + d.w + 'px;height:' + d.h + 'px');
     ring(host2, d.w, d.h, 28);
     E('div', 't clip1', c, x.item.name, 'top:' + (d.h + 22) + 'px;width:' + d.w + 'px');
-    if (d.kind === 'cont') E('div', 'm clip1', c, x.cont ? x.cont.minsLeft + ' min left' : agoText(x.launch.at), 'top:' + (d.h + 60) + 'px;width:' + d.w + 'px');
-    else E('div', 'm clip1', c, x.item.year + ' \u00B7 IMDb ' + x.item.rating.toFixed(1), 'top:' + (d.h + 60) + 'px;width:' + d.w + 'px');
+    if (d.kind !== 'cont') E('div', 'm clip1', c, x.item.year + ' \u00B7 IMDb ' + x.item.rating.toFixed(1), 'top:' + (d.h + 60) + 'px;width:' + d.w + 'px');
     c.onclick = function () { setFocus('rows', r, i); activate(); };
     d.els.push(c);
   });
@@ -242,21 +246,32 @@ function buildRows() {
   });
 }
 
-/* MARK: - Hero (two slots, crossfade by opacity) */
-function setHero(it, cont) {
+/* MARK: - Hero (two slots each, crossfade by opacity). Text follows focus at once; the picture waits 250 ms, as on Android. */
+var HERO_PIC_MS = 250;
+function setHero(it) {
   if (S.hero === it) return;
   S.hero = it;
+  clearTimeout(S.heroT);
   var n = 1 - S.heroSlot, old = S.heroSlot;
   S.heroSlot = n;
-  var hs = $('hs' + n), ht = $('ht' + n);
-  fillHero(hs, ht, it);
-  hs.className = 'hslide on'; ht.className = 'htext on';
-  $('hs' + old).className = 'hslide'; $('ht' + old).className = 'htext';
-  setTimeout(function () { if (S.heroSlot !== old) $('hs' + old).innerHTML = ''; }, 260);
+  fillHeroText($('ht' + n), it);
+  $('ht' + n).className = 'htext on'; $('ht' + old).className = 'htext';
+  S.heroT = setTimeout(function () { setHeroPic(it); }, HERO_PIC_MS);
+}
+function setHeroPic(it) {
+  if (S.heroPic === it) return;
+  var n = 1 - S.picSlot, old = S.picSlot, hs = $('hs' + n);
+  S.picSlot = n; S.heroPic = it;
+  hs.innerHTML = ''; pic(hs, it.bg, it.name);
+  hs.className = 'hslide on'; $('hs' + old).className = 'hslide';
+  setTimeout(function () { if (S.picSlot !== old) $('hs' + old).innerHTML = ''; }, 260);
 }
 function fillHero(hs, ht, it) {
-  hs.innerHTML = ''; ht.innerHTML = '';
-  pic(hs, it.bg, it.name);
+  hs.innerHTML = ''; pic(hs, it.bg, it.name);
+  fillHeroText(ht, it);
+}
+function fillHeroText(ht, it) {
+  ht.innerHTML = '';
   E('div', 'ttl clip1', ht, it.name);
   E('div', 'meta clip1', ht, metaLine(it));
   E('div', 'ov', ht, it.overview);
@@ -300,13 +315,13 @@ function setFocus(zone, a, b) {
 function buildDrawer() {
   var dr = $('drawer');
   E('div', 'glass', dr, null, 'position:absolute;left:0;top:430px;width:1920px;height:700px;border-radius:62px 62px 0 0').id = 'drawerPanel';
-  var inputs = [['live_tv', 'Live TV', 'Antenna', 1], ['hdmi', 'HDMI 1', 'Game console', 1], ['hdmi', 'HDMI 2', 'Set-top box', 1], ['hdmi', 'HDMI 3', 'No signal', 0], ['hdmi', 'HDMI 4', 'PC', 1]];
-  var shorts = [['apps', 'All Apps', ''], ['home', 'Home Settings', ''], ['tv_settings', 'TV Settings', '']];
+  var inputs = [['hdmi', 'HDMI 1', 'Game console', 1], ['hdmi', 'HDMI 2', 'Set-top box', 1], ['hdmi', 'HDMI 3', 'No signal', 0], ['hdmi', 'HDMI 4', 'PC', 1]];
+  var shorts = [['wifi', 'Wi-Fi', ''], ['home', 'Home Settings', ''], ['tv_settings', 'TV Settings', ''], ['apps', 'All Apps', '']];
   E('div', 'dlabel', dr, 'Inputs', 'top:470px');
   E('div', 'dlabel', dr, 'Shortcuts', 'top:730px');
   function mk(def, r, i, y, off) {
     var t = E('div', 'dtile glass' + (off ? ' off' : ''), dr, null, 'left:' + (96 + i * 328) + 'px;top:' + y + 'px');
-    sym(t, def[0]);
+    if (def[0] === 'wifi') paintWifi(wifiIcon(t)); else sym(t, def[0]);
     E('div', 'nm', t, def[1], (def[1].length > 11 ? 'font-size:26px;' : '') + (def[2] ? '' : 'top:55px'));
     if (def[2]) E('div', 'st', t, def[2]);
     ring(t, 300, 150, 34);
@@ -353,13 +368,13 @@ function openDetails(r, c, direct) {
     function () { toast('Opens ' + app + (x.cont ? ' at S' + x.cont.season + ' E' + x.cont.ep : '') + ' (mock)'); if (!x.cont) recordLaunch(it, app); }
   ];
   b1.onclick = function () { detFocus(0); detAct(); }; b2.onclick = function () { detFocus(1); detAct(); };
-  var y = 84, labels = { stream: 'STREAM', rent: 'RENT', buy: 'BUY' };
-  function way(p, stremio) {
+  var y = 84, kindTxt = { stream: 'Stream', rent: 'Rent', buy: 'Buy' };
+  function way(p, stremio, kind) {
     var w = E('div', 'way' + (p.installed ? ' inst' : ' dim'), W, null, 'top:' + y + 'px');
     var nm = E('div', 'wn', w, p.name);
     if (p.price) E('small', null, nm, ' ' + p.price);
     if (p.installed) sym(w, 'check');
-    E('div', 'wl', w, stremio ? 'via Stremio' : p.installed ? 'Installed' : 'Not installed');
+    E('div', 'wl', w, stremio ? 'via Stremio' : kindTxt[kind]);
     ring(w, 504, 64, 20, 4, 5);
     var i = det.els.length;
     w.onclick = function () { detFocus(i); detAct(); };
@@ -367,10 +382,15 @@ function openDetails(r, c, direct) {
     det.acts.push(function () { toast(p.installed ? 'Opens ' + p.name + (stremio ? ' (Stremio stream)' : '') + ' (mock)' : p.name + ' is not installed on this TV'); if (p.installed) recordLaunch(it, p.name); });
     y += 68;
   }
-  waysFor(it).forEach(function (g) {
-    E('div', 'gh', W, labels[g.kind], 'top:' + y + 'px');
+  /* installed first (Stream, Rent, Buy order), then Not installed, Stremio last */
+  var all = [];
+  waysFor(it).forEach(function (g) { g.list.forEach(function (p) { all.push({ p: p, kind: g.kind }); }); });
+  [true, false].forEach(function (inst) {
+    var l = all.filter(function (x) { return !!x.p.installed === inst; });
+    if (!l.length) return;
+    E('div', 'gh', W, inst ? 'INSTALLED' : 'NOT INSTALLED', 'top:' + y + 'px');
     y += 44;
-    g.list.forEach(function (p) { way(p, false); });
+    l.forEach(function (x) { way(x.p, false, x.kind); });
   });
   y += 12;
   E('div', 'gh', W, 'ALSO', 'top:' + y + 'px'); y += 44;
@@ -398,12 +418,16 @@ function activate() {
     var d = rows[S.row], c = S.cols[S.row];
     if (d.kind === 'apps') toast('Opens ' + d.items[c].app.name + ' (mock)');
     else if (d.items[c].cont) toast('Resuming in Stremio');
-    else openDetails(S.row, c);
+    else {
+      if (d.kind === 'movie' || d.kind === 'show') pushClicked(d.items[c].item);
+      openDetails(S.row, c);
+    }
   } else if (S.zone === 'search') searchAct();
   else if (S.zone === 'top') topAct(S.top);
   else if (S.zone === 'drawer') {
     var t = drawerEls[S.dr][S.dc];
-    toast(t.className.indexOf('off') >= 0 ? t.firstChild.nextSibling.textContent + ' has no signal' : t.childNodes[1].textContent + ' (mock)');
+    var nm = t.querySelector('.nm').textContent;
+    toast(t.className.indexOf('off') >= 0 ? nm + ' has no signal' : nm + ' (mock)');
   } else if (S.zone === 'details') detAct();
 }
 function move(dx, dy) {
