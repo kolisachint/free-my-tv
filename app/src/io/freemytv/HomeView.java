@@ -190,7 +190,10 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     private int w, h;
     private float k = 1;
     private boolean okDown, backDown;
-    private boolean voiceAsked;
+    private boolean voiceAsked, voiceRetried;
+    private int voiceSeq;
+    private long voiceAt;
+    private static final long VOICE_LAUNCH_MS = 70, VOICE_TIMEOUT_MS = 15_000, VOICE_QUICK_MS = 1500;
 
     /** The recognizer overlay is up: the search screen ducks down so it keeps the top. */
     boolean voiceActive() { return voiceAsked; }
@@ -916,29 +919,81 @@ final class HomeView extends View implements Choreographer.FrameCallback {
 
     // MARK: - Voice
 
-    /** The remote's mic key or the mic chip: Android's speech recognizer; the answer comes back in onVoice. */
+    /**
+     * The remote's mic key or the mic chip: Android's speech recognizer; the answer comes back in onVoice. One at a time:
+     * a press while one is pending does nothing. The search ducks down at once (so the recognizer's overlay at the top
+     * doesn't cover the search box), the recognizer starts a moment later, and a timer clears the state if it never answers.
+     */
     void startVoice() {
-        Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                .putExtra(RecognizerIntent.EXTRA_PROMPT, Ui.tr("Say a movie, a show or an app"));
+        if (voiceAsked) return;
+        startVoice(false);
+    }
+
+    private void startVoice(boolean again) {
+        voiceAsked = true;
+        voiceRetried = again;
+        final int mine = ++voiceSeq;
+        voiceAt = SystemClock.uptimeMillis();
+        search.listening();
+        wake();
+        invalidate();   // the recognizer pauses the home screen: draw the ducked search before that, not on a later frame
+        Work.io(() -> {   // the package scan for the recognizer is off the main thread
+            final Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                    .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
+                    .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                    .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    .putExtra(RecognizerIntent.EXTRA_PROMPT, Ui.tr("Say a movie, a show or an app"));
+            final ComponentName target = voiceTarget(i);   // no "Complete action using" chooser
+            if (target != null) i.setComponent(target);
+            handler.postDelayed(() -> launchVoice(i, mine), VOICE_LAUNCH_MS);   // after the ducked frame is on screen
+        });
+        // The recognizer sometimes never answers (cold speech service): stop waiting and say so.
+        handler.postDelayed(() -> {
+            if (!voiceAsked || voiceSeq != mine) return;
+            endVoice();
+            activity.finishActivity(REQ_VOICE);   // the recognizer's own screen would stay up with nothing to say
+            didntCatch();
+        }, VOICE_TIMEOUT_MS);
+    }
+
+    private void launchVoice(Intent i, int mine) {
+        if (!voiceAsked || voiceSeq != mine) return;
         try {
-            ComponentName target = voiceTarget(i);
-            if (target != null) i.setComponent(target);   // no "Complete action using" chooser
-            voiceAsked = true;
+            voiceAt = SystemClock.uptimeMillis();
             activity.startActivityForResult(i, REQ_VOICE);
-            // The recognizer sometimes never answers (cold speech service): stop waiting and say so.
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                if (voiceAsked) {
-                    voiceAsked = false;
-                    activity.finishActivity(REQ_VOICE);   // the recognizer's own screen would stay up with nothing to say
-                    if (search.open) search.heardNothing();
-                    else showToast(Ui.tr("Didn't catch that. Try the mic again."));
-                }
-            }, 12_000);
         } catch (ActivityNotFoundException | SecurityException e) {
-            voiceAsked = false;
+            endVoice();
             if (search.open) search.focusField();   // no recognizer: type instead
             showToast(Ui.tr("Voice search isn't available on this TV."));
+        }
+    }
+
+    /** Not listening any more: the search comes back up. */
+    private void endVoice() {
+        voiceAsked = false;
+        voiceSeq++;
+        wake();
+        invalidate();
+    }
+
+    private void didntCatch() {
+        if (search.open) search.heardNothing();
+        else showToast(Ui.tr("Didn't catch that. Try the mic again."));
+    }
+
+    /**
+     * The recognizer closed without an answer (Back, or it died). If it was gone within a second and a half, it didn't
+     * get started (a cold speech service): ask once more, so one press is enough. Otherwise just stop listening.
+     */
+    void onVoiceCanceled() {
+        if (!voiceAsked) return;
+        boolean quick = SystemClock.uptimeMillis() - voiceAt < VOICE_QUICK_MS;
+        boolean retry = quick && !voiceRetried;
+        endVoice();
+        if (retry) {
+            handler.postDelayed(() -> { if (!voiceAsked) startVoice(true); }, 250);
+        } else if (quick) {
+            didntCatch();
         }
     }
 
@@ -965,47 +1020,68 @@ final class HomeView extends View implements Choreographer.FrameCallback {
         return null;
     }
 
-    /** What was said: an "open/play" command launches the app, anything else searches with the transcript. */
+    /**
+     * What was said: an "open/play" command launches the app, anything else searches with the transcript. "X on TV"
+     * (also "play X on TV") is our own search for X: the tail never picks an app (it used to match "Apple TV").
+     */
     void onVoice(String text) {
-        voiceAsked = false;
+        endVoice();
         if (text == null || text.trim().isEmpty()) {
-            if (search.open) search.heardNothing();
+            didntCatch();
             return;
         }
-        if (handleVoiceCommand(text.trim())) {
-            if (search.open) closeSearch();
+        final String said = text.trim();
+        final String bare = Fuzzy.withoutOnTv(said);
+        final boolean onTv = !bare.equals(said);
+        String lower = said.toLowerCase(Locale.ROOT);
+        if (!lower.startsWith("play ") && !lower.startsWith("open ")) {
+            voiceSearch(onTv ? bare : said);
             return;
         }
+        // The command may need the package list: off the main thread, then back here.
+        Work.io(() -> {
+            final java.util.function.BooleanSupplier launch = voiceCommand(onTv ? bare : said, !onTv);
+            Work.MAIN.post(() -> {
+                if (launch != null && launch.getAsBoolean()) {
+                    if (search.open) closeSearch();
+                    return;
+                }
+                voiceSearch(onTv ? Fuzzy.withoutVerb(bare) : said);
+            });
+        });
+    }
+
+    /** The search box with what was said, the first result focused when it arrives. */
+    private void voiceSearch(String query) {
         if (details.open) details.close(false);
         if (!search.open) openSearch();
-        // "X on TV" means our own search for X: drop the tail before searching.
-        String query = text.trim();
-        String lower = query.toLowerCase(Locale.ROOT);
-        for (String tail : new String[] {" on tv", " in tv", " on the tv", " in the tv",
-                " on free my tv", " in free my tv", " on freemytv", " in freemytv"}) {
-            if (lower.endsWith(tail) && query.length() > tail.length()) {
-                query = query.substring(0, query.length() - tail.length()).trim();
-                break;
-            }
-        }
-        search.voice(query.isEmpty() ? text.trim() : query);
+        search.voice(query);
     }
 
     /**
-     * "Open Netflix", "Play Panchayat on Netflix": launches the installed app (the title in the app's own search
-     * when the command names both, else the app's home). Anything else is not a command (false: the transcript
-     * searches, as before). No new permissions, no recognizer changes.
+     * Google Assistant or the system searched for `query` (android.intent.action.SEARCH and the Assistant's SEARCH_ACTION
+     * reach HomeActivity): same as a spoken one, "on TV" tail and all.
      */
-    private boolean handleVoiceCommand(String text) {
+    void searchFor(String query) {
+        if (query == null || query.trim().isEmpty()) return;
+        onVoice(query);
+    }
+
+    /**
+     * "Open Netflix", "Play Panchayat on Netflix": the app (the title in the app's own search when the command names
+     * both, else the app's home), or null when it is not a command (the transcript searches then). Reads the package
+     * list: call it off the main thread; the returned launch runs on the main thread. `split` = look for "... on <app>".
+     */
+    private java.util.function.BooleanSupplier voiceCommand(String text, boolean split) {
         String lower = text.toLowerCase(Locale.ROOT);
         String rest = null;
         if (lower.startsWith("play ")) rest = text.substring(5).trim();
         else if (lower.startsWith("open ")) rest = text.substring(5).trim();
-        if (rest == null || rest.isEmpty()) return false;
+        if (rest == null || rest.isEmpty()) return null;
         String restLower = rest.toLowerCase(Locale.ROOT);
-        int sep = restLower.lastIndexOf(" on ");
-        if (sep < 0) sep = restLower.lastIndexOf(" in ");
-        String titlePart, appPart;
+        int sep = split ? restLower.lastIndexOf(" on ") : -1;
+        if (split && sep < 0) sep = restLower.lastIndexOf(" in ");
+        final String titlePart, appPart;
         if (sep >= 0) {
             titlePart = rest.substring(0, sep).trim();
             appPart = rest.substring(sep + 4).trim();
@@ -1013,19 +1089,20 @@ final class HomeView extends View implements Choreographer.FrameCallback {
             titlePart = rest;
             appPart = null;
         }
-        List<Search.AppMatch> apps = Search.apps(activity, appPart != null ? appPart : titlePart);
-        if (apps.isEmpty()) return false;
+        final List<Search.AppMatch> apps = Search.apps(activity, appPart != null ? appPart : titlePart);
+        if (apps.isEmpty()) return null;
         if (appPart != null) {
-            if (!titlePart.isEmpty()) return searchInApp(apps.get(0), titlePart);
-            return Launch.app(activity, apps.get(0).pkg, null);
+            if (!titlePart.isEmpty()) return () -> searchInApp(apps.get(0), titlePart);
+            return () -> Launch.app(activity, apps.get(0).pkg, null);
         }
         // Bare "Open <app>": only when the words are the app itself, so "Play Panchayat" still searches.
         for (Search.AppMatch a : apps) {
             if (a.label.equalsIgnoreCase(titlePart) || Fuzzy.norm(a.label).equals(Fuzzy.norm(titlePart))) {
-                return Launch.app(activity, a.pkg, null);
+                final String pkg = a.pkg;
+                return () -> Launch.app(activity, pkg, null);
             }
         }
-        return false;
+        return null;
     }
 
     /** The title in the app's own search (its home when the app takes no query). */
@@ -1470,8 +1547,8 @@ final class HomeView extends View implements Choreographer.FrameCallback {
             holdArmed = false;      // another key while OK is held: no move mode
             handler.removeCallbacks(holdStart);
         }
-        if (code == KeyEvent.KEYCODE_SEARCH || code == KeyEvent.KEYCODE_VOICE_ASSIST) {
-            if (down && e.getRepeatCount() == 0 && !sheetOpen) {
+        if (code == KeyEvent.KEYCODE_SEARCH || code == KeyEvent.KEYCODE_VOICE_ASSIST || code == KeyEvent.KEYCODE_ASSIST) {
+            if (down && e.getRepeatCount() == 0 && !sheetOpen && !voiceAsked) {
                 if (details.open) details.close(false);
                 if (!search.open) openSearch();
                 startVoice();

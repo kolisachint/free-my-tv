@@ -1,6 +1,7 @@
 package io.freemytv;
 
 import android.app.Activity;
+import android.app.SearchManager;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -37,6 +38,20 @@ public class HomeActivity extends Activity {
         home = new HomeView(this);
         setContentView(home);
         getWindow().setBackgroundDrawable(null);
+        final String asked = searchQuery(getIntent());   // started by the Assistant's or the system's search
+        if (asked != null) {
+            setIntent(new Intent(Intent.ACTION_MAIN));   // recreate() must not search again
+            home.post(() -> home.searchFor(asked));
+        }
+    }
+
+    /** What the Assistant or the system searched for (android.intent.action.SEARCH, the Assistant's SEARCH_ACTION), or null. */
+    private static String searchQuery(Intent intent) {
+        if (intent == null || intent.getAction() == null) return null;
+        String action = intent.getAction();
+        if (!Intent.ACTION_SEARCH.equals(action) && !"com.google.android.gms.actions.SEARCH_ACTION".equals(action)) return null;
+        String q = intent.getStringExtra(SearchManager.QUERY);
+        return q == null || q.trim().isEmpty() ? null : q.trim();
     }
 
     @Override protected void onResume() {
@@ -55,10 +70,13 @@ public class HomeActivity extends Activity {
         super.onPause();
     }
 
-    /** Home button pressed on the home screen: back to the entry state (focus on the first app, sheet closed). */
+    /** Home button pressed on the home screen: back to the entry state (focus on the first app, sheet closed); a search from the Assistant opens our search. */
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (home != null) home.reset(true);
+        if (home == null) return;
+        home.reset(true);
+        String asked = searchQuery(intent);
+        if (asked != null) home.searchFor(asked);
     }
 
     @Override protected void onDestroy() {
@@ -81,7 +99,8 @@ public class HomeActivity extends Activity {
         if (requestCode != HomeView.REQ_VOICE || home == null) return;
         java.util.ArrayList<String> said = resultCode == RESULT_OK && data != null
                 ? data.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS) : null;
-        home.onVoice(said == null || said.isEmpty() ? null : said.get(0));
+        if (resultCode != RESULT_OK && (said == null || said.isEmpty())) home.onVoiceCanceled();
+        else home.onVoice(said == null || said.isEmpty() ? null : said.get(0));
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {

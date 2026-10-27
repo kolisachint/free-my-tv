@@ -43,6 +43,12 @@ public class TestData {
         check(Fuzzy.score("xyzq", "Spider-Man") == 0, "no match = 0");
         check(Fuzzy.score("panchayat", "Panchayat") > Fuzzy.score("panch", "Panchayat Returns Again") - 1, "full title scores well");
         check(Fuzzy.score("youtube", "YouTube") > Fuzzy.score("tube", "YouTube"), "prefix beats substring");
+        check(Fuzzy.withoutOnTv("Panchayat on TV").equals("Panchayat"), "\"X on TV\" drops the tail");
+        check(Fuzzy.withoutOnTv("play Panchayat on the TV").equals("play Panchayat"), "\"on the TV\" too, verb kept for the caller");
+        check(Fuzzy.withoutOnTv("Dune in Free My TV.").equals("Dune"), "\"in Free My TV\" and a final dot");
+        check(Fuzzy.withoutOnTv("Severance on Apple TV").equals("Severance on Apple TV"), "\"on Apple TV\" is an app, not a tail");
+        check(Fuzzy.withoutOnTv("on TV").equals("on TV"), "only the tail: unchanged");
+        check(Fuzzy.withoutVerb("play Panchayat").equals("Panchayat") && Fuzzy.withoutVerb("open").equals("open"), "verb dropped only when a title follows");
         check(Fuzzy.score("spider man", "Spider-Man") > 0, "two words match across a hyphen");
         check(Fuzzy.score("spider zzzz", "Spider-Man") == 0, "every word must match");
         check(Fuzzy.score("amelie", "Amélie") > 0, "accent-insensitive");

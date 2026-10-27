@@ -16,8 +16,8 @@ import java.util.function.Consumer;
 /**
  * Search: TMDB's /search/multi (movies and shows, en-US, your region, no adult titles) plus the apps on the TV whose
  * name matches. The caller debounces (~300 ms after the last key). A new query() cuts the one still running.
- * Titles are best first: all 10 summaries land at once, the top 3 carry their ways to watch a moment later (a
- * second partial Result), the rest when no newer query is pending (the final Result; Recs.details fills any gap
+ * Titles are best first: the top 3 land first as summaries, then with their ways to watch and the rest (up to
+ * 10) as summaries (a second partial Result), the rest detailed when no newer query is pending (the final Result; Recs.details fills any gap
  * left by a cut-off query when a title is opened). The last 20 /search/multi answers are cached, so retyping is
  * instant and never touches the network.
  */
@@ -110,8 +110,8 @@ final class Search {
     }
 
     /**
-     * The ranked titles (best first). Publishes twice through `early`: all summaries at once, then the top 3 with
-     * their ways to watch; the rest are detailed only when no newer query is pending (the caller drops a cut-off
+     * The ranked titles (best first). Publishes twice through `early`: the top 3 summaries first, then the top 3 with
+     * their ways to watch plus the other summaries (up to 10); the rest are detailed only when no newer query is pending (the caller drops a cut-off
      * result, and Recs.details fills any gap when a title is opened). The /search/multi answer is cached per
      * query, so retyping never touches the network.
      */
@@ -150,12 +150,13 @@ final class Search {
         });
         final List<Title> top = new ArrayList<>();
         for (int i : order) if (top.size() < MAX_TITLES) top.add(list.get(i));
-        early.accept(new ArrayList<>(top));   // wave 1: every summary at once
-        detailInto(c, top, 0, Math.min(DETAILED, top.size()), cancel);
+        int first = Math.min(DETAILED, top.size());
+        early.accept(new ArrayList<>(top.subList(0, first)));   // wave 1: the top 3 summaries, at once
+        detailInto(c, top, 0, first, cancel);
         if (cancel.isCancelled()) return top;
-        if (top.size() > DETAILED) early.accept(new ArrayList<>(top));   // wave 2: the top 3 detailed, fast
+        if (top.size() > first) early.accept(new ArrayList<>(top));   // wave 2: the top 3 detailed, the rest as summaries (up to 10)
         if (cancel.isCancelled()) return top;   // a newer query is pending: leave the rest as summaries
-        detailInto(c, top, Math.min(DETAILED, top.size()), top.size(), cancel);
+        detailInto(c, top, first, top.size(), cancel);
         if (cancel.isCancelled()) return top;
         for (Title t : top) Catalog.get(c).remember(t);
         return top;
