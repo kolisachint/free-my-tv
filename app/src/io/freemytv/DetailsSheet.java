@@ -43,6 +43,7 @@ final class DetailsSheet {
     private StaticLayout titleLayout, overview;
     private float btn2W;
     private boolean btn2Enabled;
+    private Title.Provider btn2Provider;   // the app "Watch in" opens (null: Stremio)
     private final List<Way> ways = new ArrayList<>();
     private float waysHeight, scrollTarget;
     private final Spring scroll = new Spring(0.2f, 1f, 0);
@@ -81,6 +82,7 @@ final class DetailsSheet {
         scroll.snap(0);
         rebuild();
         requestImages();
+        if (t.tmdbId != 0) Recs.get(home.context()).prefetchLinks(t);   // the title's page in each app, so Watch is instant
         if (t.tmdbId != 0 && !t.full) {
             loading = true;
             final Title asked = t;
@@ -166,9 +168,13 @@ final class DetailsSheet {
         posterGradient = Fx.placeholder(t.title, 300, 450);
         btn1 = t.full && t.trailerYouTubeId.isEmpty() ? Ui.tr("Find trailer") : Ui.tr("Play trailer");
         String app = null;
-        List<Title.Provider> inst = t.installedStreams();
+        btn2Provider = null;
+        for (Title.Provider p0 : t.providers) {
+            Title.Provider p = installedVia(p0);
+            if (btn2Provider == null && Title.Provider.STREAM.equals(p.kind) && p.installed) btn2Provider = p;
+        }
         if (cont != null) app = cont.sourceName;
-        else if (!inst.isEmpty()) app = inst.get(0).name;
+        else if (btn2Provider != null) app = btn2Provider.name;
         else if (t.stremio) app = "Stremio";
         btn2Enabled = app != null;
         btn2 = app != null ? Ui.trf("Watch in {app}", "app", app) : (t.full ? Ui.tr("Not on your apps") : Ui.tr("Loading…"));
@@ -177,12 +183,14 @@ final class DetailsSheet {
         float y = 84;
         String[] kinds = {Title.Provider.STREAM, Title.Provider.RENT, Title.Provider.BUY};
         String[] names = {Ui.tr("Stream"), Ui.tr("Rent"), Ui.tr("Buy")};
-        for (int g = 0; g < 3; g++) {
-            boolean head = false;
-            // Pass 1 (the dimmed "Not installed" rows) waits for the full details: no verdicts while loading.
-            for (int pass = 0; pass < (t.full ? 2 : 1); pass++) {
-                for (Title.Provider p : t.providers) {
-                    if (!kinds[g].equals(p.kind) || p.installed != (pass == 0)) continue;
+        // Installed apps first across stream, rent and buy; the dimmed "Not installed" ones after (once the details are full).
+        for (int pass = 0; pass < (t.full ? 2 : 1); pass++) {
+            for (int g = 0; g < 3; g++) {
+                boolean head = false;
+                for (Title.Provider p0 : t.providers) {
+                    if (!kinds[g].equals(p0.kind)) continue;
+                    Title.Provider p = installedVia(p0);
+                    if (p.installed != (pass == 0)) continue;
                     if (!head) {
                         Way h = new Way();
                         h.header = true;
@@ -201,8 +209,8 @@ final class DetailsSheet {
                     ways.add(w);
                     y += 68;
                 }
+                if (head) y += 12;
             }
-            if (head) y += 12;
         }
         if (t.stremio) {
             Way h = new Way();
@@ -222,6 +230,24 @@ final class DetailsSheet {
         }
         waysHeight = y;
         if (idx >= 2 + rowCount()) idx = 1;
+    }
+
+    /**
+     * The provider as the TV has it: installed when any package of its app is (Sony's Apple TV, JioHotstar...), with
+     * that package. Never calls an app that is on the TV "Not installed", whatever the saved list says.
+     */
+    private Title.Provider installedVia(Title.Provider p) {
+        if (p.installed) return p;
+        String pkg = Services.installedPkg(home.context(), p.appKey);
+        if (pkg == null) return p;
+        Title.Provider q = new Title.Provider();
+        q.name = p.name;
+        q.kind = p.kind;
+        q.appKey = p.appKey;
+        q.pkg = pkg;
+        q.installed = true;
+        q.price = p.price;
+        return q;
     }
 
     private int rowCount() {
@@ -288,7 +314,7 @@ final class DetailsSheet {
             if (cont != null) {
                 if (!Launch.open(home.context(), cont, opts)) home.showToast(Ui.trf("Couldn't open {app}.", "app", cont.sourceName));
             } else {
-                watch(null, opts);
+                watch(btn2Provider, opts);
             }
             return;
         }

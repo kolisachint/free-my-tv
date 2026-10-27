@@ -11,8 +11,8 @@ import java.net.URLEncoder;
 
 /**
  * Opens titles, trailers and settings. Every call tries the deep link first and falls back to the app's own launch
- * screen (or the browser). Safe to call from the main thread; a Watchmode lookup (watchmode_key) happens in the
- * background first and the result is cached.
+ * screen (or the browser). Safe to call from the main thread; the title's address (JustWatch, then Watchmode if
+ * keyed) is looked up in the background first and cached.
  */
 final class Launch {
     private Launch() {}
@@ -21,7 +21,7 @@ final class Launch {
 
     /**
      * "Watch": opens `t` in provider `p` (null = the first installed streaming app, else Stremio). Records it in History.
-     * The title's own page opens when we know its address (Watchmode link, Stremio); else the app's home.
+     * The title's own page opens when we know its address (JustWatch, Watchmode, Stremio); else the app's home.
      * `options` (ActivityOptions.toBundle(), may be null) and `done` (main thread, may be null).
      */
     static void watch(Context c, Title t, Title.Provider p, Bundle options, Done done) {
@@ -124,18 +124,13 @@ final class Launch {
         return viewOrLaunch(c, link, pkg, "", options);
     }
 
-    /**
-     * The title's page when its address is known (Watchmode/Stremio link), else the app's own search for the
-     * title (one click from the title in most TV apps), else the app's home. Exact title pages aren't possible
-     * from TMDB data alone, so the in-app search is the permanent middle ground.
-     */
-    /** The app's own search page for the title, where one is known to open (verified on device). */
+    /** The app's own search page for the title, where one is known to open (verified on device). Voice search uses it too. */
     static String appSearchUrl(String pkg, String title) {
         String path;
-        if ("com.google.android.youtube.tv".equals(pkg)) {
+        if (Services.YOUTUBE_PKG.equals(pkg)) {
             path = "https://www.youtube.com/results?search_query=";
         } else if ("in.startv.hotstar".equals(pkg)) {
-            path = "https://www.hotstar.com/in/search?q=";   // JioHotstar (Watchmode India has no Hotstar)
+            path = "https://www.hotstar.com/in/search?q=";   // JioHotstar: opens, but without results
         } else {
             return null;
         }
@@ -146,21 +141,63 @@ final class Launch {
         }
     }
 
+    /**
+     * The title's page when its address is known (JustWatch, Watchmode, Stremio), else the app's own search where one
+     * works (YouTube), else the app's home. Never leaves the button dead: the home opens whenever the app is there.
+     */
     private static boolean viewOrLaunch(Context c, String link, String pkg, String title, Bundle options) {
-        if (link != null && !link.isEmpty() && view(c, link, pkg, options)) return true;
-        // The in-app search only where the app takes it (verified per app on device); elsewhere the
-        // failed attempt just adds noise and delay before the home screen, so skip it there.
-        String url = title != null && !title.isEmpty() ? appSearchUrl(pkg, title) : null;
+        if (link != null && !link.isEmpty()) {
+            if (openTitle(c, link, pkg, options)) {
+                AppLog.w("opened " + pkg + " on the title page");
+                return true;
+            }
+            AppLog.w("title page refused by " + pkg + ", falling back");
+        }
+        // Only YouTube's search shows results; JioHotstar's search page opens empty, so there the app's home is better.
+        String url = title != null && !title.isEmpty() && Services.YOUTUBE_PKG.equals(pkg) ? appSearchUrl(pkg, title) : null;
         if (url != null && view(c, url, pkg, options)) return true;
         if (url != null && searchInApp(c, pkg, title, options)) return true;
-        return launchApp(c, pkg, options);
+        boolean ok = launchApp(c, pkg, options);
+        AppLog.w((ok ? "opened " : "couldn't open ") + pkg + " home");
+        return ok;
+    }
+
+    private static final String NETFLIX_PKG = "com.netflix.ninja";
+
+    /** The title's address in the app, built the way that app takes it. */
+    private static boolean openTitle(Context c, String link, String pkg, Bundle options) {
+        if (pkg != null && pkg.startsWith("com.netflix.")) return openNetflix(c, link, pkg, options);
+        return view(c, link, pkg, options);
+    }
+
+    /**
+     * Netflix on TV: its MainActivity takes https://www.netflix.com/title/<id> (and /watch/<id>) with the extra
+     * source=30 that JustWatch sends; the nflx:// scheme is declared without BROWSABLE, so view() can't reach it.
+     */
+    private static boolean openNetflix(Context c, String link, String pkg, Bundle options) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("netflix\\.com/(?:[a-z-]+/)?(?:title|watch)/(\\d+)").matcher(link);
+        if (!m.find()) return view(c, link, pkg, options);
+        String id = m.group(1);
+        String[] tries = {"https://www.netflix.com/title/" + id, "nflx://www.netflix.com/title/" + id, "https://www.netflix.com/watch/" + id};
+        for (String url : tries) {
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url)).setPackage(pkg == null ? NETFLIX_PKG : pkg)
+                    .putExtra("source", "30").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            if (url.startsWith("https:")) i.addCategory(Intent.CATEGORY_BROWSABLE);
+            if (start(c, i, options)) return true;
+        }
+        return false;
     }
 
     private static boolean view(Context c, String uri, String pkg, Bundle options) {
         Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(uri)).addCategory(Intent.CATEGORY_BROWSABLE)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         if (pkg != null) i.setPackage(pkg);
-        return start(c, i, options);
+        if (start(c, i, options)) return true;
+        if (uri.startsWith("http://") || uri.startsWith("https://")) return false;
+        // A custom scheme (stremio://, nflx://…) may be declared without BROWSABLE: try again without it.
+        Intent plain = new Intent(Intent.ACTION_VIEW, Uri.parse(uri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (pkg != null) plain.setPackage(pkg);
+        return start(c, plain, options);
     }
 
     /** The app's own search for the title (Netflix, Prime Video, YouTube…): false when it takes no search. */

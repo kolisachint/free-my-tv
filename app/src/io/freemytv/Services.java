@@ -147,6 +147,16 @@ final class Services {
         return null;
     }
 
+    /** The package of an installed app for the service key (any of its packages: Sony's Apple TV, JioHotstar...), else null. */
+    static String installedPkg(Context c, String appKey) {
+        if (appKey == null || appKey.isEmpty()) return null;
+        if (appKey.equals(STREMIO)) return stremioInstalled(c) ? STREMIO_PKG : null;
+        for (String[][] table : new String[][][] {TABLE, STORES}) {
+            for (String[] s : table) if (s[1].equals(appKey) && installed(c, s[2])) return s[2];
+        }
+        return null;
+    }
+
     /** Key of the service for a package ("com.netflix.ninja" → "netflix"), or null. */
     static String keyOf(String pkg) {
         if (STREMIO_PKG.equals(pkg)) return STREMIO;
