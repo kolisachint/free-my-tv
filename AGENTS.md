@@ -16,6 +16,12 @@ The owner tests every home-screen change on a mockup **before** it goes to a TV.
   TMDB key. Keep it.
 - Change the mock first, show screenshots, get an OK, then port to `HomeView.java` (Android is the target).
 
+## Testing on the TV
+
+- `TV=192.168.1.7 . tools/tv.sh`, then `tv_up`, `k <KEYS>`, `s <name>` (screenshot to `/tmp/t_<name>s.png`),
+  `tv_search 'X on TV'`, `tv_playing <pkg>` (Netflix is DRM: screenshots are black), `tv_top`, `tv_perf`.
+- Per-app deep links that work, measurements and open items: `docs/sessions/` (latest first).
+
 ## Home redesign decisions (Android)
 
 - TMDB key is required; without it this home has no purpose (the owner uses another clean UI then).
