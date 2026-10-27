@@ -2,6 +2,7 @@ package io.freemytv;
 
 import java.text.Normalizer;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * Search matching, no Android in it (tools/TestData.java runs it on a plain JVM): case and accent insensitive,
@@ -15,6 +16,28 @@ final class Fuzzy {
         if (s == null) return "";
         String d = Normalizer.normalize(s.toLowerCase(Locale.ROOT), Normalizer.Form.NFD);
         return d.replaceAll("\\p{M}+", "").replaceAll("[^a-z0-9]+", " ").trim();
+    }
+
+    private static final Pattern ON_TV = Pattern.compile("^(.*\\S)\\s+(?:on|in)\\s+(?:the\\s+)?(?:free\\s*my\\s*tv|tv)\\s*[.!?]*$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern VERB = Pattern.compile("^(?:play|open|search for|search|watch|find)\\s+(.*\\S)\\s*$", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * "Panchayat on TV" / "in the TV" / "on Free My TV" → "Panchayat": the tail only says "search here". "on Apple TV"
+     * is not a tail (the app's name stays). Text that is only the tail comes back unchanged.
+     */
+    static String withoutOnTv(String s) {
+        if (s == null) return "";
+        String t = s.trim();
+        java.util.regex.Matcher m = ON_TV.matcher(t);
+        return m.matches() ? m.group(1).trim() : t;
+    }
+
+    /** "play Panchayat" → "Panchayat" (a leading "play", "open", "watch"... verb; unchanged when nothing follows it). */
+    static String withoutVerb(String s) {
+        if (s == null) return "";
+        String t = s.trim();
+        java.util.regex.Matcher m = VERB.matcher(t);
+        return m.matches() ? m.group(1).trim() : t;
     }
 
     /** a and b are equal, or differ by one letter added, removed or changed. */

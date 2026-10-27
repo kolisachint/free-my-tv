@@ -24,9 +24,14 @@ final class SearchScreen {
     private static final int IDLE = 0, LOADING = 1, DONE = 2;
     private static final int MODE_IDLE = 0, MODE_EMPTY = 1, MODE_LIST = 2;
     private static final float RX = 720, RY = 190, TILE_W = 1104, TILE_H = 340, APP_H = 120, GAP = 32;
-    /** How far the screen ducks down while the recognizer overlay holds the top. */
-    private static final float VOICE_DY = 220;
+    /**
+     * While the recognizer's overlay holds the top (about 250 px of the 1080), the whole screen shrinks toward the
+     * bottom centre: the field lands at y 268, the last key row ends at 893.
+     */
+    private static final float VOICE_SCALE = 0.78f;
     private static final long DEBOUNCE_MS = 300;
+    /** How lit the first result is while the keyboard has the focus (1 = focused). */
+    private static final float DEFAULT_FOCUS = 0.55f;
 
     private static final class Key {
         final String label, value;
@@ -173,6 +178,15 @@ final class SearchScreen {
         setQuery(text, true);
     }
 
+    /**
+     * The recognizer is about to take the top of the screen. It pauses the home screen, which stops the animations: the
+     * search must already be fully in (not mid-fade), as the next frame drawn is the one that stays under the overlay.
+     */
+    void listening() {
+        if (open) anim.snap(1);
+        notice = "";
+    }
+
     /** The recognizer heard nothing usable: say so instead of sitting silently. */
     void heardNothing() {
         notice = Ui.tr("Didn't catch that. Try the mic again.");
@@ -291,6 +305,7 @@ final class SearchScreen {
             if (area != RESULTS) listY.snap(0);
         }
         if (area == RESULTS && !hasResults()) area = KEYS;
+        if (area != RESULTS) resRow = resIdx = 0;   // the keyboard has the focus: the first result is the default target
         resRow = Math.min(resRow, Math.max(0, rowCount() - 1));
         resIdx = Math.min(resIdx, Math.max(0, rowLen(resRow) - 1));
         retarget();
@@ -395,6 +410,8 @@ final class SearchScreen {
             } else if (kr < 6) {
                 kr++;
                 kc = keyAt(kr, k.c).c;
+            } else if (hasResults()) {
+                area = RESULTS; resRow = 0; resIdx = 0;   // Down from the last row: the default result
             }
         } else if (area == RESULTS) {
             if (dx < 0) { if (resIdx > 0) resIdx--; else area = KEYS; }
@@ -414,7 +431,11 @@ final class SearchScreen {
 
     private void retarget() {
         counter = Ui.trf("{i} / {n}", "i", resRow + 1, "n", tiles.size());
-        for (int i = 0; i < tiles.size(); i++) tiles.get(i).focus.target = mode == MODE_LIST && area == RESULTS && i == resRow ? 1 : 0;
+        // In the results: the focused tile. Typing: the first one, lightly, as the default target (Right or Down lands on it).
+        for (int i = 0; i < tiles.size(); i++) {
+            Tile t = tiles.get(i);
+            t.focus.target = mode != MODE_LIST ? 0 : area == RESULTS ? (i == resRow ? 1 : 0) : (i == 0 ? DEFAULT_FOCUS : 0);
+        }
         if (mode == MODE_LIST && !tiles.isEmpty()) {
             int f = area == RESULTS ? resRow : 0;
             Tile cur = tiles.get(f);
@@ -486,7 +507,12 @@ final class SearchScreen {
         if (a < 0.999f) layer = c.saveLayerAlpha(0, 0, 1920, 1080, Math.round(255 * a));
         // The recognizer's overlay takes the top while listening: the whole screen ducks down under it.
         boolean duck = home.voiceActive();
-        if (duck) { c.save(); c.translate(0, VOICE_DY); }
+        if (duck) {
+            c.save();
+            c.translate(960, 1080);
+            c.scale(VOICE_SCALE, VOICE_SCALE);
+            c.translate(-960, -1080);
+        }
         // Field and mic chip
         fx.glass(c, 96, 40, 1276, 136, 48, 1);
         fx.magnifier(c, 152, 90, fx.ink());
