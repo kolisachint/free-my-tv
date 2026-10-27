@@ -136,14 +136,14 @@ final class JustWatch {
 
     private static String slug(String title) {
         String s = title == null ? "" : java.text.Normalizer.normalize(title, java.text.Normalizer.Form.NFD)
-                .replaceAll("[^A-Za-z0-9]+", "-").replaceAll("^-+|-+$", "").toLowerCase(Locale.ROOT);
+                .replaceAll("\\p{M}+", "").replaceAll("[^A-Za-z0-9]+", "-").replaceAll("^-+|-+$", "").toLowerCase(Locale.ROOT);
         return s.isEmpty() ? "show" : s;
     }
 
     private static JSONObject post(String title, String country, String language) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(ENDPOINT).openConnection();
-        c.setConnectTimeout(8000);
-        c.setReadTimeout(8000);
+        c.setConnectTimeout(4000);   // Watch waits on this: short, then the app's home
+        c.setReadTimeout(4000);
         c.setRequestMethod("POST");
         c.setDoOutput(true);
         c.setRequestProperty("Content-Type", "application/json");

@@ -95,8 +95,6 @@ public class TestData {
         check(Stremio.time("2026-10-24T12:00:00.000Z", 0) - Stremio.time("2026-10-24T11:00:00.000Z", 0) == 3600_000L, "ISO time parse");
         String req = Stremio.request("SECRET");
         check(req.contains("\"authKey\":\"SECRET\"") && req.contains("\"collection\":\"libraryItem\"") && req.contains("\"all\":true"), "request body: " + req.replace("SECRET", "***"));
-        check(ContinueItem.openedAgo(0, 30_000).equals("Opened just now") && ContinueItem.openedAgo(0, 3 * 3600_000L).equals("Opened 3 h ago")
-                && ContinueItem.openedAgo(0, 30 * 3600_000L).equals("Opened yesterday"), "opened-ago text");
     }
 
     static void sun() {

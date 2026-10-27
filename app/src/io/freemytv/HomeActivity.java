@@ -99,7 +99,7 @@ public class HomeActivity extends Activity {
         if (requestCode != HomeView.REQ_VOICE || home == null) return;
         java.util.ArrayList<String> said = resultCode == RESULT_OK && data != null
                 ? data.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS) : null;
-        if (resultCode != RESULT_OK && (said == null || said.isEmpty())) home.onVoiceCanceled();
+        if (resultCode == RESULT_CANCELED && (said == null || said.isEmpty())) home.onVoiceCanceled();
         else home.onVoice(said == null || said.isEmpty() ? null : said.get(0));
     }
 
