@@ -45,7 +45,6 @@ final class Fx {
     final TextPaint heroWt = tp(Ui.semibold, 26, 0), chip = tp(Ui.bold, 26, 0);
     final TextPaint rowLabel = tp(Ui.displayBold, 38, -0.02f), rowCount = tp(Ui.semibold, 30, 0);
     final TextPaint cardT = tp(Ui.bold, 28, 0), cardM = tp(Ui.medium, 24, 0), cardPh = tp(Ui.bold, 32, 0);
-    final TextPaint cardLeft = tp(Ui.bold, 28, 0), cardTag = tp(Ui.bold, 24, 0);
     final TextPaint dLabel = tp(Ui.bold, 34, 0), dName = tp(Ui.bold, 30, 0), dStatus = tp(Ui.semibold, 24, 0);
     final TextPaint sTitle = tp(Ui.displayBold, 60, -0.03f), sMeta = tp(Ui.semibold, 30, 0), sOv = tp(Ui.regular, 28, 0);
     final TextPaint sCast = tp(Ui.semibold, 28, 0), btn = tp(Ui.bold, 30, 0), sFoot = tp(Ui.regular, 26, 0);

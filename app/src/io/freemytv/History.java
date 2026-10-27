@@ -11,7 +11,8 @@ import java.util.List;
 
 /**
  * Titles opened from this home screen (never plain app opens), newest first, one entry per title, 20 at most. Saved in
- * SharedPreferences as JSON. Use record() when the user presses Watch (Launch does it).
+ * SharedPreferences as JSON. record() is for Watch (Launch does it); opened() is for a title card the user clicked (its
+ * details sheet), which has no app yet.
  */
 final class History {
     private History() {}
@@ -39,9 +40,33 @@ final class History {
 
     /** As record(), with the title's page in the app (`link`, may be ""): the Continue card opens that page. */
     static synchronized void record(Title t, String appKey, String link) {
+        record(t, appKey, link, false);
+    }
+
+    /**
+     * The user opened the title's details sheet (OK on a card). Goes first in Continue; an app and page it already had
+     * from a Watch are kept. Reads and writes SharedPreferences: runs on a background thread.
+     */
+    static void opened(Title t) {
+        if (t == null || t.tmdbId == 0) return;
+        Work.io(() -> record(t, "", "", true));
+    }
+
+    private static synchronized void record(Title t, String appKey, String link, boolean keepApp) {
         if (t == null || t.tmdbId == 0) return;
         List<Entry> list = all();
-        for (int i = list.size() - 1; i >= 0; i--) if (list.get(i).tmdbId == t.tmdbId && list.get(i).kind.equals(t.kind)) list.remove(i);
+        String oldApp = "", oldLink = "";
+        for (int i = list.size() - 1; i >= 0; i--) {
+            Entry o = list.get(i);
+            if (o.tmdbId != t.tmdbId || !o.kind.equals(t.kind)) continue;
+            oldApp = o.appKey;
+            oldLink = o.link;
+            list.remove(i);
+        }
+        if (keepApp) {
+            appKey = oldApp;
+            link = oldLink;
+        }
         Entry e = new Entry();
         e.tmdbId = t.tmdbId;
         e.imdbId = t.imdbId;
@@ -129,7 +154,6 @@ final class History {
             c.kind = e.kind;
             c.source = e.appKey;
             c.sourceName = Services.NAME.containsKey(e.appKey) ? Services.NAME.get(e.appKey) : e.appKey;
-            c.subtitle = ContinueItem.openedAgo(e.at, now);
             c.at = e.at;
             c.tmdbId = e.tmdbId;
             c.imdbId = e.imdbId;

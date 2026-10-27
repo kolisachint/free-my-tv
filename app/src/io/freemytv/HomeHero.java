@@ -76,7 +76,7 @@ final class HomeHero {
         } else if (card.cont != null) {
             s.meta = Fx.fit(card.cont.subtitle, fx.heroMeta, 940);
             s.url = card.cont.backdropUrl(1280);
-            s.chips.add(card.cont.sourceName);
+            if (!card.cont.sourceName.isEmpty()) s.chips.add(card.cont.sourceName);   // a clicked-only title has no app
         }
         float x = 96 + fx.heroWt.measureText(Ui.tr("Watch on")) + 18;
         s.chipsStart = x;

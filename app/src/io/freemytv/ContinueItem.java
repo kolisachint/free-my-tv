@@ -8,8 +8,8 @@ final class ContinueItem {
     String kind = "movie";          // "movie" or "tv"
     String source = "";             // SOURCE_STREMIO, or the app key it was opened in ("netflix", "prime"...)
     String sourceName = "";         // "Stremio", "Netflix": the card's badge
-    String subtitle = "";           // "S2 E5 · 23 min left", "23 min left", "Opened 2 h ago"
-    float progress;                 // 0..1 (0 = no bar)
+    String subtitle = "";           // Stremio: "S2 E5 · 23 min left" (the hero; the card shows only the title)
+    float progress;                 // 0..1 (Stremio; the card draws no bar)
     long at;                        // epoch ms of the last watch / open (the row is newest first)
     int tmdbId;                     // 0 when unknown (Stremio items)
     String imdbId = "";
@@ -39,16 +39,5 @@ final class ContinueItem {
      */
     static String stremioLink(String type, String id, String videoId) {
         return "stremio:///detail/" + type + "/" + id + (videoId == null || videoId.isEmpty() ? "" : "/" + videoId);
-    }
-
-    /** "Opened 2 h ago" / "Opened just now" / "Opened yesterday" / "Opened 3 days ago". */
-    static String openedAgo(long at, long now) {
-        long min = Math.max(0, now - at) / 60_000L;
-        if (min < 2) return "Opened just now";
-        if (min < 60) return "Opened " + min + " min ago";
-        long h = min / 60;
-        if (h < 24) return "Opened " + h + " h ago";
-        long d = h / 24;
-        return d == 1 ? "Opened yesterday" : "Opened " + d + " days ago";
     }
 }

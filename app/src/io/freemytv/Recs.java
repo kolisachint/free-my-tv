@@ -226,7 +226,7 @@ final class Recs {
         return new File(new File(context.getCacheDir(), "recs"), p.backdrop.replace("/", ""));
     }
 
-    /** With a key: fetches the list if stale or the time of day (morning/afternoon/night) changed; then the details. */
+    /** With a key: fetches the list if it is over a day old (or the key, country or installed apps changed); then the details. */
     void refreshIfStale() {
         if (!hasKey(context) || fetching) return;
         long now = System.currentTimeMillis();
@@ -235,7 +235,7 @@ final class Recs {
         long sinceFail = now - failedAt;    // negative = the clock went back: don't wait
         if (!newKey && failedAt != 0 && sinceFail >= 0 && sinceFail < 10 * 60_000L) return;
         int p = period(now);
-        boolean stale = newKey || p != period || now - listAt > LIST_EVERY || now < listAt || picks.isEmpty()
+        boolean stale = newKey || now - listAt > LIST_EVERY || now < listAt || picks.isEmpty()
                 || !listLanguage.equals(Ui.language);
         boolean missing = false;
         for (Pick pick : wanted()) missing |= !pick.detailed || !hasImage(pick) || needsLink(pick);
