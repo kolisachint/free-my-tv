@@ -190,13 +190,15 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     private int w, h;
     private float k = 1;
     private boolean okDown, backDown;
-    private boolean voiceAsked, voiceRetried;
+    private boolean voiceAsked, voiceRetried, voiceLive;
     private int voiceSeq;
     private long voiceAt;
+    private Voice voice;   // the in-process recognizer (voiceLive while it listens); the activity route below is the fallback
+    // The fallback route's workarounds: the activity starts after the ducked frame, a timer, one retry if it died at once.
     private static final long VOICE_LAUNCH_MS = 70, VOICE_TIMEOUT_MS = 15_000, VOICE_QUICK_MS = 1500;
 
-    /** The recognizer overlay is up: the search screen ducks down so it keeps the top. */
-    boolean voiceActive() { return voiceAsked; }
+    /** The recognizer's own overlay (the fallback route) is up: the search screen ducks down so it keeps the top. */
+    boolean voiceActive() { return voiceAsked && !voiceLive; }
 
     // Debug overlay (MENU three times, or the "debug" preference): bitmaps held, cache size and frame times.
     private boolean debug;
@@ -368,6 +370,11 @@ final class HomeView extends View implements Choreographer.FrameCallback {
         details.cancelPending();
         wifi.stop();
         if (tvInputs != null) tvInputs.unregisterCallback(inputCallback);
+        if (voiceLive) endVoice();   // the fallback activity's pause is not ours to end: it is the recognizer coming up
+        if (voice != null) {
+            voice.destroy();   // lets go of the speech service; the next press binds it again
+            voice = null;
+        }
         // Nothing is on screen: only what a visible screen needs (the open details sheet's two pictures) stays.
         rows.dropAll();
         hero.drop();
@@ -384,6 +391,10 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     /** Memory is short: every picture goes (the visible ones come back from the disk cache). */
     void trimMemory(int level) {
         Images.trim();
+        if (!voiceLive && voice != null) {
+            voice.destroy();
+            voice = null;
+        }
         rows.dropAll();
         hero.drop();
         if (running) retarget(false);
@@ -393,6 +404,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     void reset(boolean animated) {
         wake();
         cancelReorder(!animated);
+        if (voiceLive) stopVoice();
         if (details.open) details.close(false);
         if (search.open) search.close();
         sheetOpen = false;
@@ -926,13 +938,72 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     // MARK: - Voice
 
     /**
-     * The remote's mic key or the mic chip: Android's speech recognizer; the answer comes back in onVoice. One at a time:
-     * a press while one is pending does nothing. The search ducks down at once (so the recognizer's overlay at the top
-     * doesn't cover the search box), the recognizer starts a moment later, and a timer clears the state if it never answers.
+     * The remote's mic key or the mic chip: the answer comes back in onVoice. One at a time: a press while one is
+     * pending does nothing, except on the chip while we listen: that stops. Listening happens in this process (Voice:
+     * the words show in the search field as they come); where that can't work, the recognizer's own screen is used.
      */
     void startVoice() {
+        if (voiceLive) {
+            stopVoice();
+            return;
+        }
         if (voiceAsked) return;
-        startVoice(false);
+        if (search.open && Voice.available(getContext())) startLive();
+        else startVoice(false);
+    }
+
+    private void startLive() {
+        voiceAsked = voiceLive = true;
+        if (voice == null) voice = new Voice(getContext());
+        search.listenStart();
+        wake();
+        voice.start(new Voice.Listener() {
+            @Override public void onReady() { search.listenReady(); }
+
+            @Override public void onPartial(String text) { search.listenPartial(text); }
+
+            @Override public void onFinal(List<String> alternatives) { onVoice(bestHeard(alternatives)); }
+
+            @Override public void onFail(int kind) {
+                endVoice();
+                if (kind == Voice.UNAVAILABLE) startVoice(false);   // the service won't take us: its own screen then
+                else if (kind == Voice.OFFLINE) voiceFailed(Ui.tr("Voice search needs the internet."));
+                else didntCatch();
+            }
+        });
+    }
+
+    /** Back or the mic chip while listening: stop, the search stays as it was. */
+    private void stopVoice() {
+        if (voice != null) voice.cancel();
+        endVoice();
+    }
+
+    /**
+     * Of the recognizer's alternatives, the one that matches a title or an app we already know (the home rows, the
+     * shelf, recent searches) best; the first one when none does or they tie. No network: the lists are in memory.
+     * A command's verb and an "on TV" tail don't count.
+     */
+    private String bestHeard(List<String> alternatives) {
+        String best = alternatives.get(0);
+        if (alternatives.size() < 2) return best;
+        List<String> known = new ArrayList<>();
+        for (Title t : recs.movies()) known.add(t.title);
+        for (Title t : recs.shows()) known.add(t.title);
+        for (HomeApps.Item it : shelf) if (it.label != null) known.add(it.label);
+        known.addAll(Prefs.recentSearches());
+        int top = -1;
+        for (int i = 0; i < alternatives.size(); i++) {
+            String q = Fuzzy.withoutVerb(Fuzzy.withoutOnTv(alternatives.get(i)));
+            int score = 0;
+            for (String name : known) score = Math.max(score, Fuzzy.score(q, name));
+            if (score > top) {   // strictly: the recognizer's own order wins ties
+                top = score;
+                best = alternatives.get(i);
+                if (i > 0) AppLog.w("voice: alternative " + (i + 1) + " of " + alternatives.size() + " matches what we know");
+            }
+        }
+        return best;
     }
 
     private void startVoice(boolean again) {
@@ -976,15 +1047,24 @@ final class HomeView extends View implements Choreographer.FrameCallback {
 
     /** Not listening any more: the search comes back up. */
     private void endVoice() {
+        if (voiceLive) {
+            voiceLive = false;
+            if (voice != null) voice.cancel();   // no-op once it has answered
+        }
         voiceAsked = false;
         voiceSeq++;
+        search.listenEnd();
         wake();
         invalidate();
     }
 
     private void didntCatch() {
-        if (search.open) search.heardNothing();
-        else showToast(Ui.tr("Didn't catch that. Try the mic again."));
+        voiceFailed(Ui.tr("Didn't catch that. Try the mic again."));
+    }
+
+    private void voiceFailed(String why) {
+        if (search.open) search.heardNothing(why);
+        else showToast(why);
     }
 
     /**
@@ -992,7 +1072,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
      * get started (a cold speech service): ask once more, so one press is enough. Otherwise just stop listening.
      */
     void onVoiceCanceled() {
-        if (!voiceAsked) return;
+        if (!voiceAsked || voiceLive) return;
         boolean quick = SystemClock.uptimeMillis() - voiceAt < VOICE_QUICK_MS;
         boolean retry = quick && !voiceRetried;
         endVoice();
@@ -1642,7 +1722,9 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     }
 
     private void back() {
-        if (details.open) {
+        if (voiceLive) {
+            stopVoice();
+        } else if (details.open) {
             details.close(true);
             retarget(false);
         } else if (search.open) {

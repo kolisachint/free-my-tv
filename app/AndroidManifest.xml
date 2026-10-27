@@ -9,6 +9,10 @@
     <!-- The Wi-Fi button: signal level and, with the location permission granted over adb, the network's name. -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Voice search listens in the app (words show in the search box as they come). Granted over adb when Free My TV
+         mode is turned on (a launcher on a TV has no place to show the prompt); without it the recognizer's own
+         screen is used instead. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- After the TV boots (and after a TV update), checks that Free My TV mode is still as you left it. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
@@ -16,6 +20,10 @@
          returns null). The shelf and streaming apps, the live TV apps and, through the <intent>, every TV app
          (for "All Apps"). -->
     <queries>
+        <!-- Android 11+: SpeechRecognizer.isRecognitionAvailable looks for the TV's speech service. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
         <package android:name="com.netflix.ninja" />
         <package android:name="com.stremio.one" />
         <package android:name="in.startv.hotstar" />

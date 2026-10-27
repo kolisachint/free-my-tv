@@ -91,8 +91,20 @@ final class SearchScreen {
     private final Runnable run = this::runQuery;
     private List<String> trending = new ArrayList<>();
     private String notice = "", counter = "";
+    // Voice: live = the in-process recognizer is on (the field shows what it hears; the query is not touched until it
+    // answers, so Back puts everything as it was), ready = its microphone is open. `status` is the line under the field.
+    private boolean live, ready;
+    private String partial = "", status = "";
+    private long heardAt;
+    private final Runnable pulse = new Runnable() {
+        @Override public void run() {
+            if (!live || !ready || !open) return;
+            home.wake();   // one frame for the ring, ~30 per second: the rest of the screen is still
+            home.handler().postDelayed(this, 33);
+        }
+    };
     private final Shader shade = new LinearGradient(0, 0, TILE_W, 0, new int[] {0xEB000000, 0xD1000000, 0x40000000}, new float[] {0, 0.45f, 1}, Shader.TileMode.CLAMP);
-    private final String placeholder, micLabel;
+    private final String placeholder, micLabel, stopLabel, listeningText, speakNow;
     private final String tagBest, tagMovie, tagShow, tagApp, openApp;
 
     SearchScreen(HomeView home, Fx fx) {
@@ -105,6 +117,9 @@ final class SearchScreen {
         keys.add(new Key(Ui.tr("Clear").toUpperCase(Ui.locale()), "clear", 6, 4, 2));
         placeholder = Ui.tr("Search movies, shows and apps");
         micLabel = Ui.tr("Mic");
+        stopLabel = Ui.tr("Stop");
+        listeningText = Ui.tr("Listening\u2026");
+        speakNow = Ui.tr("Speak now. Back to stop.");
         tagBest = Ui.tr("Best match");
         tagMovie = Ui.tr("Movie");
         tagShow = Ui.tr("Show");
@@ -125,7 +140,8 @@ final class SearchScreen {
         area = KEYS;
         kr = kc = 0;
         resRow = resIdx = 0;
-        notice = "";
+        notice = status = "";
+        live = ready = false;
         anim.target = 1;
         home.handler().removeCallbacks(blink);
         home.handler().postDelayed(blink, 530);
@@ -135,8 +151,10 @@ final class SearchScreen {
 
     void close() {
         open = false;
+        live = ready = false;
         anim.target = 0;
         home.handler().removeCallbacks(run);
+        home.handler().removeCallbacks(pulse);
         home.handler().removeCallbacks(blink);
         Search.cancel();
         releaseTiles();
@@ -159,6 +177,7 @@ final class SearchScreen {
 
     /** A key typed on the TV's keyboard or the on-screen one. */
     void type(String value) {
+        heardAt = 0;
         String q = query;
         if (value.equals("del")) {
             if (!q.isEmpty()) q = q.substring(0, q.length() - 1);
@@ -175,6 +194,7 @@ final class SearchScreen {
     /** Voice result: fills the query, searches now and puts the focus on the first result when it arrives. */
     void voice(String text) {
         focusFirst = true;
+        heardAt = SystemClock.uptimeMillis();   // runQuery logs how long the first results take
         setQuery(text, true);
     }
 
@@ -184,12 +204,48 @@ final class SearchScreen {
      */
     void listening() {
         if (open) anim.snap(1);
-        notice = "";
+        notice = status = "";
     }
 
-    /** The recognizer heard nothing usable: say so instead of sitting silently. */
-    void heardNothing() {
-        notice = Ui.tr("Didn't catch that. Try the mic again.");
+    /** The in-process recognizer started: the field says "Listening…" and the chip says "Stop" (the mic is not open yet). */
+    void listenStart() {
+        live = true;
+        ready = false;
+        partial = "";
+        notice = status = "";
+        home.wake();
+    }
+
+    /** Its microphone is open: the line under the field says so and the chip's ring starts pulsing. */
+    void listenReady() {
+        if (!live) return;
+        ready = true;
+        status = speakNow;
+        home.handler().removeCallbacks(pulse);
+        home.handler().post(pulse);
+        home.wake();
+    }
+
+    /** What it hears so far, drawn in the field (dim: not an answer yet). */
+    void listenPartial(String text) {
+        if (!live) return;
+        partial = Fx.fit(text, fx.sq, 1040);
+        home.wake();
+    }
+
+    /** Done listening (an answer, an error, Back): the field shows the query again. */
+    void listenEnd() {
+        if (!live && status.isEmpty()) return;
+        live = ready = false;
+        partial = "";
+        status = "";
+        home.handler().removeCallbacks(pulse);
+        home.wake();
+    }
+
+    /** The recognizer heard nothing usable (or failed): say why under the field instead of sitting silently. */
+    void heardNothing(String why) {
+        status = why;
         home.wake();
     }
 
@@ -209,14 +265,14 @@ final class SearchScreen {
         // those without touching /search/multi).
         if (query.trim().length() >= 1) {
             state = LOADING;
-            notice = "";
+            notice = status = "";
             if (!hasLast) layoutResults(null);   // nothing to keep on screen: show "Searching\u2026"
             if (now) runQuery(); else home.handler().postDelayed(run, DEBOUNCE_MS);
         } else {
             state = IDLE;
             hasLast = false;
             Search.cancel();
-            notice = "";
+            notice = status = "";
             layoutResults(null);
         }
         home.wake();
@@ -233,6 +289,10 @@ final class SearchScreen {
             notice = result.failed ? Ui.tr("Can't search right now. Check the internet.") : "";
             layoutResults(result);
             if (!result.partial && !result.failed && asked.length() >= 3 && (!result.titles.isEmpty() || !result.apps.isEmpty())) Prefs.addRecentSearch(asked);
+            if (heardAt != 0 && (!result.titles.isEmpty() || !result.apps.isEmpty())) {
+                AppLog.w("voice: first results " + (SystemClock.uptimeMillis() - heardAt) + " ms after the words");
+                heardAt = 0;
+            }
             if (focusFirst && (!result.titles.isEmpty() || !result.apps.isEmpty())) {
                 focusFirst = false;
                 area = RESULTS;
@@ -516,7 +576,15 @@ final class SearchScreen {
         // Field and mic chip
         fx.glass(c, 96, 40, 1276, 136, 48, 1);
         fx.magnifier(c, 152, 90, fx.ink());
-        if (query.isEmpty()) {
+        if (live) {
+            if (partial.isEmpty()) {
+                fx.sqPh.setColor(fx.dim());
+                c.drawText(listeningText, 196, Fx.base(40, 96, fx.sqPh), fx.sqPh);
+            } else {
+                fx.sq.setColor(fx.dim());
+                c.drawText(partial, 196, Fx.base(40, 96, fx.sq), fx.sq);
+            }
+        } else if (query.isEmpty()) {
             fx.sqPh.setColor(fx.dim());
             c.drawText(placeholder, 196, Fx.base(40, 96, fx.sqPh), fx.sqPh);
             if (caret && area != FIELD) {
@@ -543,9 +611,14 @@ final class SearchScreen {
         fx.microphone(c, 1334 + 20, 88 + 2, fg);
         fx.mic.setColor(fg);
         fx.mic.setTextAlign(android.graphics.Paint.Align.LEFT);
-        c.drawText(micLabel, 1396, Fx.base(40, 96, fx.mic), fx.mic);
+        c.drawText(live ? stopLabel : micLabel, 1396, Fx.base(40, 96, fx.mic), fx.mic);
+        if (live && ready) fx.pulse(c, 1304, 40, 1564, 136, 48, (SystemClock.uptimeMillis() % 1400) / 1400f);
         if (mf) fx.ring(c, 1304, 40, 1564, 136, 48, 1);
         c.restore();
+        if (!status.isEmpty()) {
+            fx.sNote.setColor(fx.meta());
+            c.drawText(status, 112, Fx.base(146, 40, fx.sNote), fx.sNote);
+        }
         keyboard(c);
         c.save();
         c.translate(RX, RY);

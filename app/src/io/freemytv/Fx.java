@@ -174,6 +174,18 @@ final class Fx {
         c.drawRoundRect(rect, radius + 12, radius + 12, stroke);
     }
 
+    /**
+     * A ring that grows out of the shape and fades as `phase` goes 0 to 1 (the mic chip while it listens): motion plus a
+     * shape, so "listening" never rests on color. One stroked round rect per frame, nothing allocated.
+     */
+    void pulse(Canvas c, float l, float t, float r, float b, float radius, float phase) {
+        float g = 8 + 22 * phase;
+        stroke.setStrokeWidth(5);
+        stroke.setColor(alpha(ink(), 1 - phase));
+        rect.set(l - g, t - g, r + g, b + g);
+        c.drawRoundRect(rect, radius + g, radius + g, stroke);
+    }
+
     /** The same ring for a row's thin button (an item in a list: 5 px border, 4 px away). */
     void ringThin(Canvas c, float l, float t, float r, float b, float radius, float a) {
         stroke.setStrokeWidth(5);
