@@ -6,10 +6,11 @@
  */
 var SQ = '', SRES = null, MIC = false, micT = 0, micN = 0, sBuilt = false;
 var SF = { a: 'kb', kr: 0, kc: 0, rr: 0, ri: 0 };
-var SLIST = null, SKEYS = [], SRROWS = [], micEl = null, fieldEl = null, listenEl = null;
+var SLIST = null, SKEYS = [], SRROWS = [], micEl = null, fieldEl = null, hintEl = null;
 var SHOWN = 3, lazyT = 0;   // titles shown now: 3 at once, 10 after ~300 ms (simulated lazy load)
 var TRENDING = ['Panchayat', 'Spider-Man', 'RRR', 'Scam 1992', 'Mirzapur', 'Netflix'];
-var MIC_PHRASES = ['spider man', 'panchayat', 'rrr', 'play Mirzapur on TV', 'lofi on YouTube'];
+var MIC_PHRASES = ['reacher', 'spider man', 'panchayat', 'rrr', 'play Mirzapur on TV', 'lofi on YouTube'];
+var MPART = '', MERR = false, MPHRASE = '', MWORDS = [], MK = 0, MICFAIL = !!FLAGS.micerr;   // listening state; ?micerr: the next listen hears nothing
 
 /* MARK: - Matching: case/accent-insensitive, word prefix, substring, 1 typo for words >= 4 letters */
 function norm(s) { return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim(); }
@@ -85,6 +86,9 @@ function buildSearch() {
   micEl = E('div', 'smic glass', P);
   var mi = E('div', 'mic', micEl); E('div', 'mb', mi); E('div', 'ma', mi); E('div', 'ms', mi); E('div', 'mt', mi);
   E('div', 'mlab', micEl, 'Mic');
+  E('div', 'mpulse', micEl);   /* listening: a pulsing ring (shape + motion, not only color) */
+  var mv = E('div', 'mlv', micEl);
+  for (var b = 0; b < 4; b++) E('i', null, mv, null, 'left:' + (b * 14) + 'px;-webkit-animation-delay:' + (b * 0.12) + 's;animation-delay:' + (b * 0.12) + 's');
   ring(micEl, 260, 96, 57);
   micEl.onclick = function () { SF.a = 'field'; applyFocus(); searchAct(); };
   SKEYS = [];
@@ -92,8 +96,7 @@ function buildSearch() {
   var kb = E('div', 'skb', P);
   for (i = 0; i < 36; i++) addKey(kb, chars[i], chars[i], Math.floor(i / 6), i % 6, 1);
   addKey(kb, 'Space', ' ', 6, 0, 2); addKey(kb, 'Delete', 'del', 6, 2, 2); addKey(kb, 'Clear', 'clear', 6, 4, 2);
-  listenEl = E('div', 'slisten', P, 'Listening\u2026');
-  listenEl.style.display = 'none';
+  hintEl = E('div', 'snote shint', P);
   E('div', 'sres', P).id = 'sRes';
   sBuilt = true;
 }
@@ -109,24 +112,27 @@ function addKey(kb, label, val, r, c, span) {
 function kbAt(r, c) { for (var i = 0; i < SKEYS.length; i++) if (SKEYS[i].r === r && c >= SKEYS[i].c && c < SKEYS[i].c + SKEYS[i].s) return SKEYS[i]; return null; }
 
 /* MARK: - Query / mic */
+/* While listening the field is the listening surface: words appear in it dimmer (partial), then the final text replaces them. */
 function renderField() {
   var q = fieldEl.querySelector('.sq');
   q.innerHTML = '';
   if (MIC) {
-    var lv = E('span', 'lvl', q);
-    for (var i = 0; i < 5; i++) E('i', null, lv, null, '-webkit-animation-delay:' + (i * 0.12) + 's;animation-delay:' + (i * 0.12) + 's');
+    if (MPART) E('span', 'qt partial', q, MPART); else E('span', 'ph', q, 'Listening\u2026');   // partial words: dimmer
   } else {
     if (SQ) E('span', 'qt', q, SQ); else E('span', 'ph', q, 'Search movies, shows and apps');
-    E('span', 'caret', q);
   }
+  E('span', 'caret', q);
+  micEl.classList.toggle('live', MIC);
   micEl.querySelector('.mlab').textContent = MIC ? 'Listening\u2026' : 'Mic';
-  listenEl.style.display = MIC ? 'block' : 'none';
-  stage.classList.toggle('search-duck', MIC);
+  micEl.querySelector('.ring').style.width = (MIC ? 386 : 266) + 'px';   // ring follows the wider live chip (380 px)
+  hintEl.textContent = MIC ? 'Speak now. Back to stop.' : MERR ? "Didn't catch that. Press the mic to try again." : '';
+  hintEl.style.display = MIC || MERR ? 'block' : 'none';
 }
 function typeKey(v) {
   if (MIC) cancelMic();
   if (SF.a === 'res') SF.a = 'kb';
   if (v === 'del') SQ = SQ.slice(0, -1); else if (v === 'clear') SQ = ''; else if (SQ.length < 40) SQ += v;
+  MERR = false;
   renderField();
   runSearch();
 }
@@ -138,13 +144,29 @@ function runSearch() {
   renderSearch();
   if (SRES && SRES.titles.length > SHOWN) lazyT = setTimeout(function () { SHOWN = 10; renderSearch(); }, 300);
 }
+/* Simulated recognizer: first word ~700 ms after start, then one word every 250 ms, final ~400 ms after the last word. */
 function startMic() {
   if (MIC) return;
-  MIC = true; clearTimeout(lazyT); renderField();
-  micT = setTimeout(function () {
-    MIC = false;
-    applyTranscript(MIC_PHRASES[micN++ % MIC_PHRASES.length]);
-  }, 1500);
+  var fail = MICFAIL;
+  MICFAIL = false;
+  MIC = true; MERR = false; MPART = ''; MK = 0; clearTimeout(lazyT);
+  MPHRASE = MIC_PHRASES[micN % MIC_PHRASES.length];
+  MWORDS = MPHRASE.split(' ');
+  renderField();
+  if (fail) micT = setTimeout(function () { endMic(false); }, 2000);
+  else micT = setTimeout(micWord, 700);
+}
+function micWord() {
+  MPART = MWORDS.slice(0, ++MK).join(' ');
+  renderField();
+  if (MK < MWORDS.length) micT = setTimeout(micWord, 250);
+  else micT = setTimeout(function () { endMic(true); }, 400);
+}
+function endMic(ok) {
+  MIC = false; MPART = ''; clearTimeout(micT);
+  if (!ok) { MERR = true; renderField(); return; }
+  micN++;
+  applyTranscript(MPHRASE);
 }
 /* Transcript from the recognizer (M, or ?voice=). "... on TV" fills OUR box without the tail; "... on YouTube" only toasts. */
 function applyTranscript(t) {
@@ -158,7 +180,8 @@ function applyTranscript(t) {
   SQ = t; SF.a = 'res'; SF.rr = 0; SF.ri = 0;
   renderField(); runSearch(); saveRecent(SQ);
 }
-function cancelMic() { MIC = false; clearTimeout(micT); renderField(); }
+/* Back, Enter / click on the mic chip, or M: stop listening. The field is still the previous query (nothing was typed into SQ). */
+function cancelMic() { MIC = false; MPART = ''; clearTimeout(micT); renderField(); }
 
 /* MARK: - Results */
 function chipRows(R, list, y, pick) {
@@ -258,7 +281,7 @@ function applyFocus() {
 /* vertical result list: keep the focused tile inside the 800 px clip (translateY), count "2 / 9", load images near focus only */
 function listScroll() {
   var f = SF.a === 'res' ? SF.rr : 0, t = SLIST.tiles, cur = t[f], n = t.length, i;
-  var H = stage.classList.contains('search-duck') ? 650 : 800, ty = 0;   // clip height (650 while listening)
+  var H = 800, ty = 0;   // clip height
   if (cur.y + cur.h > H - 24) ty = H - 24 - cur.y - cur.h;
   SLIST.strip.style.webkitTransform = SLIST.strip.style.transform = 'translateY(' + ty + 'px)';
   for (i = 0; i < n; i++) if (t[i].el.querySelector('.img')) cardPic(t[i].el, Math.abs(i - f) <= 2);
@@ -285,7 +308,7 @@ function searchMove(dx, dy) {
 }
 function searchAct() {
   var f = SF;
-  if (f.a === 'field') startMic();
+  if (f.a === 'field') { if (MIC) cancelMic(); else startMic(); }
   else if (f.a === 'kb') typeKey(kbAt(f.kr, f.kc).val);
   else SRROWS[f.rr].acts[f.ri]();
 }
@@ -297,7 +320,8 @@ function searchKey(e, k) {
   else if (k === 'ArrowDown') move(0, 1);
   else if (k === 'Enter') searchAct();
   else if (k === 'Escape') back();
-  else if (k === 'Backspace') { if (SQ.length) typeKey('del'); else back(); }
+  else if (k === 'Backspace') { if (MIC) cancelMic(); else if (SQ.length) typeKey('del'); else back(); }
+  else if ((k === 'm' || k === 'M') && MIC) cancelMic();
   else if (k.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey && /[a-z0-9 ]/i.test(k)) typeKey(k.toLowerCase());
   else u = false;
   if (u) e.preventDefault();
@@ -308,13 +332,13 @@ function openSearch(q) {
   if (!sBuilt) buildSearch();
   S.zone = 'search';
   stage.classList.add('search-open');
-  SQ = q || ''; MIC = false; clearTimeout(micT); clearTimeout(lazyT);
+  SQ = q || ''; MIC = false; MPART = ''; MERR = false; clearTimeout(micT); clearTimeout(lazyT);
   SF = { a: 'kb', kr: 0, kc: 0, rr: 0, ri: 0 };
   renderField(); runSearch();
 }
 function closeSearch() {
   stage.classList.remove('search-open');
-  MIC = false; clearTimeout(micT); clearTimeout(lazyT);
+  MIC = false; MPART = ''; MERR = false; clearTimeout(micT); clearTimeout(lazyT);
   renderField();
   S.zone = 'top';
   setFocus('top', 0);
@@ -337,5 +361,5 @@ function flagText(v) { try { return decodeURIComponent(String(v).replace(/\+/g, 
 (function () {
   if (FLAGS.search) { openSearch(FLAGS.search === '1' ? '' : flagText(FLAGS.search)); }
   if (FLAGS.voice && FLAGS.voice !== '1') { if (S.zone !== 'search') openSearch(); applyTranscript(flagText(FLAGS.voice)); }
-  if (FLAGS.mic) { if (S.zone !== 'search') openSearch(); startMic(); }
+  if (FLAGS.mic || FLAGS.micerr) { if (S.zone !== 'search') openSearch(); startMic(); }
 })();

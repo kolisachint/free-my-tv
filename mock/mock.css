@@ -288,17 +288,28 @@ html.ovmode, body.ovmode { overflow-y: auto; overflow-x: hidden; height: auto; }
 .sq { position: absolute; left: 100px; top: 0; width: 1050px; height: 96px; line-height: 96px; font-size: 52px; font-weight: 600; white-space: nowrap; overflow: hidden; }
 .sq .ph { color: #55555A; font-weight: 500; font-size: 44px; }
 .night .sq .ph { color: #B8B8BE; }
+/* Partial words from the recognizer: dimmer until final. */
+.sq .partial { opacity: 0.5; }
 .caret { display: inline-block; width: 4px; height: 58px; margin-left: 4px; vertical-align: middle; background: currentColor; -webkit-animation: blink 1s steps(1) infinite; animation: blink 1s steps(1) infinite; }
 @-webkit-keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } }
 @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } }
-.lvl { display: inline-block; height: 60px; margin-left: 24px; vertical-align: middle; white-space: nowrap; }
-.lvl i { display: inline-block; width: 12px; height: 56px; margin-right: 10px; border-radius: 6px; background: currentColor; vertical-align: middle; -webkit-transform: scaleY(0.25); transform: scaleY(0.25); -webkit-animation: lvl 0.5s ease-in-out infinite alternate; animation: lvl 0.5s ease-in-out infinite alternate; }
 @-webkit-keyframes lvl { to { -webkit-transform: scaleY(1); } }
 @keyframes lvl { to { transform: scaleY(1); } }
 .smic { position: absolute; left: 1304px; top: 40px; width: 260px; height: 96px; border-radius: 48px; -webkit-transition: -webkit-transform 0.15s ease-out; transition: transform 0.15s ease-out; }
 .smic.focus { background: #FFF; color: #1D1D1F; -webkit-transform: scale(1.06); transform: scale(1.06); }
 .smic .ring { left: -9px; top: -9px; width: 250px; height: 86px; }
 .smic .mlab { position: absolute; left: 92px; top: 0; width: 160px; height: 96px; line-height: 96px; font-size: 32px; font-weight: 700; white-space: nowrap; }
+/* Listening: the chip fills dark (inverted at night), wider, with the label, a pulsing ring and 4 level bars. Shape and motion carry the state, not color alone. */
+.smic.live { width: 380px; background: #1D1D1F; color: #FFF; }
+.night .smic.live { background: #F5F5F7; color: #1D1D1F; }
+.smic.live .mlab { width: 200px; }
+.mpulse { display: none; position: absolute; left: 20px; top: 18px; width: 60px; height: 60px; border: 3px solid currentColor; border-radius: 30px; box-sizing: border-box; opacity: 0; }
+.smic.live .mpulse { display: block; -webkit-animation: mpulse 1.2s ease-out infinite; animation: mpulse 1.2s ease-out infinite; }
+@-webkit-keyframes mpulse { 0% { opacity: 0.9; -webkit-transform: scale(0.9); transform: scale(0.9); } 100% { opacity: 0; -webkit-transform: scale(1.5); transform: scale(1.5); } }
+@keyframes mpulse { 0% { opacity: 0.9; transform: scale(0.9); } 100% { opacity: 0; transform: scale(1.5); } }
+.mlv { display: none; position: absolute; left: 300px; top: 0; width: 60px; height: 96px; }
+.smic.live .mlv { display: block; }
+.mlv i { position: absolute; top: 34px; width: 8px; height: 28px; border-radius: 4px; background: currentColor; -webkit-transform: scaleY(0.3); transform: scaleY(0.3); -webkit-animation: lvl 0.6s ease-in-out infinite alternate; animation: lvl 0.6s ease-in-out infinite alternate; }
 .mic { position: absolute; left: 30px; top: 24px; width: 40px; height: 48px; }
 .mic div { position: absolute; background: currentColor; box-sizing: border-box; }
 .mic .mb { left: 12px; top: 0; width: 16px; height: 28px; border-radius: 9px; }
@@ -310,19 +321,13 @@ html.ovmode, body.ovmode { overflow-y: auto; overflow-x: hidden; height: auto; }
 .skey .ring { left: -9px; top: -9px; }
 .skey.focus { background: #FFF; color: #1D1D1F; -webkit-transform: scale(1.1); transform: scale(1.1); z-index: 3; }
 .sres { position: absolute; left: 720px; top: 190px; width: 1104px; height: 880px; }
-/* The recognizer overlay holds the top while listening: the screen ducks down under it. */
-/* Duck by 220 px (as on Android) so the "Listening" bar at the top never covers the field, keys or results. */
-.search-duck .sfield, .search-duck .smic { top: 260px; }
-.search-duck .skb { top: 416px; }
-.search-duck .sres { top: 410px; }
-.search-duck .sclip { height: 650px; }
-.slisten { position: absolute; left: 96px; top: 40px; width: 1728px; height: 96px; line-height: 96px; border-radius: 48px; background: #1D1D1F; color: #FFF; text-align: center; font-size: 34px; font-weight: 700; z-index: 4; }
-.night .slisten { background: #F5F5F7; color: #1D1D1F; }
 /* First result: preselected, dashed ring (a shape cue, not only color). */
 .shero.pre:not(.focus) > .ring { display: block; border-style: dashed; outline: 0; }
 .sres .rlabel { width: 900px; }
 .snote { position: absolute; left: 0; height: 40px; line-height: 40px; width: 1000px; font-size: 30px; font-weight: 500; color: #3A3A3F; }
 .night .snote { color: #D8D8DC; }
+/* Listening / error hint, under the field (the field does not move). */
+.shint { left: 196px; top: 144px; width: 1000px; font-size: 30px; font-weight: 600; white-space: nowrap; }
 .sempty { position: absolute; left: 0; top: 0; width: 1100px; height: 80px; line-height: 80px; font-size: 56px; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; }
 .schip { position: absolute; height: 64px; border-radius: 32px; text-align: center; line-height: 64px; font-size: 30px; font-weight: 700; white-space: nowrap; -webkit-transition: -webkit-transform 0.15s ease-out; transition: transform 0.15s ease-out; }
 .schip .ring { left: -9px; top: -9px; width: auto; height: auto; }
@@ -349,5 +354,3 @@ html.ovmode, body.ovmode { overflow-y: auto; overflow-x: hidden; height: auto; }
 .shero.sapp .shtag { background: rgba(255, 255, 255, 0.95); }
 .sres .tile { width: 196px; height: 126px; }
 .ovb #search { position: absolute; }
-.lvl { vertical-align: top; margin-top: 18px; }
-.lvl i { vertical-align: top; margin-top: 0; }
