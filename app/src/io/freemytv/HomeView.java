@@ -314,6 +314,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
 
     void openDetails(Title t, ContinueItem from) {
         click.open();
+        History.opened(t);   // a title the user clicked goes to Continue (background thread)
         details.open(t, from);
         spoken.focusMoved();
     }
@@ -822,7 +823,12 @@ final class HomeView extends View implements Choreographer.FrameCallback {
         }
         int ink = Fx.blend(fx.ink(), Fx.INK, f);
         float dim = off ? 0.55f : 1;
-        fx.symbol(c, it.symbol, r.left + 54, r.top + 66, 43, Fx.alpha(ink, dim));
+        if (it.kind == HomeApps.WIFI) {
+            fx.wifi(c, r.left + 54, r.top + 66, wifiState.connected && !wifiState.wifi ? 4 : wifiState.level, !wifiState.connected,
+                    Fx.alpha(ink, dim), Fx.blend(0xFFFFFFFF, 0xFF1D1D1F, night));
+        } else {
+            fx.symbol(c, it.symbol, r.left + 54, r.top + 66, 43, Fx.alpha(ink, dim));
+        }
         boolean status = !drawerStatus[i].isEmpty();
         TextPaint np = fx.dName;
         np.setTextSize(drawerName[i].length() > 11 ? 26 : 30);
@@ -1316,7 +1322,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
 
     private void setDrawerItems(List<HomeApps.Item> list) {
         int inputs = 0;
-        while (inputs < list.size() && (list.get(inputs).kind == HomeApps.INPUT || list.get(inputs).kind == HomeApps.LIVE_TV)) inputs++;
+        while (inputs < list.size() && list.get(inputs).kind == HomeApps.INPUT) inputs++;
         boolean same = list.size() == drawerItems.size();
         for (int i = 0; same && i < list.size(); i++) {
             same = list.get(i).key.equals(drawerItems.get(i).key) && list.get(i).connected == drawerItems.get(i).connected;
@@ -1702,7 +1708,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
                 case TOP_INPUTS:
                     openDrawer();
                     for (int i = 0; i < drawerItems.size(); i++) {
-                        if (drawerItems.get(i).kind == HomeApps.INPUT || drawerItems.get(i).kind == HomeApps.LIVE_TV) { drawerIndex = i; break; }
+                        if (drawerItems.get(i).kind == HomeApps.INPUT) { drawerIndex = i; break; }
                     }
                     retarget(false);
                     return;
@@ -1727,7 +1733,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
                     if (!Launch.open(getContext(), ci, options(x, 620 + 72, row.w, row.h))) showToast(Ui.trf("Couldn't open {app}.", "app", ci.sourceName));
                 } else {
                     Title t = rows.match(ci);
-                    openDetails(t != null ? t : fromContinue(ci), ci);
+                    openDetails(t != null ? t : fromContinue(ci), ci.pkg.isEmpty() ? null : ci);   // no app yet (only clicked): the sheet's normal Watch
                 }
             } else {
                 openDetails(card.title, null);
@@ -1752,6 +1758,10 @@ final class HomeView extends View implements Choreographer.FrameCallback {
         }
         if (it.kind == HomeApps.INPUTS) {
             openDrawer();
+            return;
+        }
+        if (it.kind == HomeApps.WIFI) {
+            if (!Launch.wifiSettings(getContext(), options(r.left / k, r.top / k, r.width() / k, r.height() / k))) showToast(Ui.tr("Couldn't open the settings."));
             return;
         }
         boolean opened = HomeApps.open(activity, it, this, Math.round(r.left), Math.round(r.top),

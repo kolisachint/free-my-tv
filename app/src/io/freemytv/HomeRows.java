@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The rows under the hero: Continue (landscape cards, up to 4), Movies and Shows (up to 15 each). Geometry is the mock's
+ * The rows under the hero: Continue (landscape cards, up to 4, title only), Movies and Shows (up to 15 each). Geometry is the mock's
  * (1920 x 1080 design space, mock.css). Only the cards on screen, and one more each side, hold a picture; the rows
  * next to the focused one keep two; every other card draws a gradient and its title (windowed loading, cancelled by
  * the card as its tag).
@@ -23,12 +23,17 @@ final class HomeRows {
     /** Space each row takes (label, cards, two caption lines). */
     static final float[] BLOCK = {430, 400, 400};
     static final float SHELF_BLOCK = 330;
+    /**
+     * What the cards may hold at once. The hero keeps at most 2 more (current and the one fading out, ~1.8 MB each at
+     * 1280 x 720 RGB_565), so the home stays within 12 pictures and 16 MB.
+     */
+    static final int MAX_IMAGES = 10;
+    static final long MAX_BYTES = 12L * 1024 * 1024;
 
     static final class Card {
         Title title;
         ContinueItem cont;
-        String name = "", line2 = "", badge = "", left = "";
-        float progress, badgeW;
+        String name = "", line2 = "";
         float w, h;
         LinearGradient gradient;
         StaticLayout phText;
@@ -116,17 +121,7 @@ final class HomeRows {
                 ContinueItem it = cont.get(i);
                 c.cont = it;
                 c.name = it.title;
-                c.badge = it.sourceName;
-                c.badgeW = fx.cardTag.measureText(c.badge) + 32;
-                c.progress = it.progress;
-                String sub = it.subtitle == null ? "" : it.subtitle;
-                c.line2 = sub;
-                if (it.progress > 0) {
-                    c.left = sub;
-                    int dot = sub.lastIndexOf(" \u00B7 ");
-                    if (dot >= 0) c.line2 = sub.substring(dot + 3);
-                }
-                c.url = it.backdropUrl(Math.round(c.w));
+                c.url = it.backdropUrl(300);   // w300 like the other cards: the picture is a background for the title
             } else {
                 Title t = titles.get(i);
                 c.title = t;
@@ -136,7 +131,6 @@ final class HomeRows {
             }
             c.name = Fx.fit(c.name, fx.cardT, c.w);
             c.line2 = Fx.fit(c.line2, fx.cardM, c.w);
-            c.left = Fx.fit(c.left, fx.cardLeft, c.w - 48);
             String full = cont != null ? cont.get(i).title : titles.get(i).title;
             c.gradient = Fx.placeholder(full, c.w, c.h);
             c.phText = Fx.layout(full, fx.cardPh, Math.round(c.w - 40), 2, Layout.Alignment.ALIGN_CENTER, 8);
@@ -199,6 +193,10 @@ final class HomeRows {
         boolean sync = Images.get(c.url, Math.round(c.w * k), Math.round(c.h * k), c, (url, b) -> {
             card.loading = false;
             if (!card.want || b == null) return;
+            if (loaded() >= MAX_IMAGES || bytes() + b.getByteCount() > MAX_BYTES) {   // over budget: the placeholder stays
+                card.want = false;                                                    // (the next window() asks again)
+                return;
+            }
             card.bmp = b;
             card.shader = new BitmapShader(b, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
             home.wake();
@@ -212,6 +210,7 @@ final class HomeRows {
      * with `focusRow` == -99 drops everything.
      */
     void window(int focusRow, float k) {
+        int total = 0;
         for (int r = 0; r < COUNT; r++) {
             Row row = rows[r];
             int n = row.cards.size(), lo = 0, hi = -1, dist = focusRow == -99 ? 99 : Math.abs(r - focusRow);
@@ -232,13 +231,47 @@ final class HomeRows {
                 lo = row.col;
                 hi = Math.min(n - 1, row.col + 1);
             }
-            for (int j = 0; j < n; j++) want(row.cards.get(j), j >= lo && j <= hi, k);
+            LO[r] = lo;
+            HI[r] = hi;
+            total += Math.max(0, hi - lo + 1);
+        }
+        // Over the count: the next rows give up their second card, then the focused row its far end (the one away from
+        // the focused card), so the cards on screen are the last to go.
+        for (int r = 0; r < COUNT && total > MAX_IMAGES; r++) {
+            if (focusRow != -99 && Math.abs(r - focusRow) == 1 && HI[r] > LO[r]) { HI[r]--; total--; }
+        }
+        for (int r = 0; r < COUNT && total > MAX_IMAGES; r++) {
+            if (focusRow == -99 || r != focusRow) continue;
+            int col = rows[r].col;
+            while (total > MAX_IMAGES && HI[r] > LO[r]) {
+                if (HI[r] - col >= col - LO[r]) HI[r]--; else LO[r]++;
+                total--;
+            }
+        }
+        // Pictures leave first, so the ones coming in find room under the budget.
+        for (int pass = 0; pass < 2; pass++) {
+            for (int r = 0; r < COUNT; r++) {
+                Row row = rows[r];
+                for (int j = 0; j < row.cards.size(); j++) {
+                    boolean on = j >= LO[r] && j <= HI[r];
+                    if (on == (pass == 1)) want(row.cards.get(j), on, k);
+                }
+            }
         }
     }
+
+    private final int[] LO = new int[COUNT], HI = new int[COUNT];
 
     /** Frees every picture (low memory, or leaving the home screen). */
     void dropAll() {
         for (Row row : rows) for (Card c : row.cards) release(c);
+    }
+
+    /** Bytes the cards' pictures take. */
+    long bytes() {
+        long n = 0;
+        for (Row row : rows) for (Card c : row.cards) if (c.bmp != null) n += c.bmp.getByteCount();
+        return n;
     }
 
     int loaded() {
@@ -316,7 +349,7 @@ final class HomeRows {
         fx.cardT.setColor(Fx.alpha(fx.ink(), a));
         fx.cardM.setColor(Fx.alpha(fx.dim(), a));
         c.drawText(cd.name, x, Fx.base(y + h + 22, 34, fx.cardT), fx.cardT);
-        c.drawText(cd.line2, x, Fx.base(y + h + 60, 30, fx.cardM), fx.cardM);
+        if (!cd.line2.isEmpty()) c.drawText(cd.line2, x, Fx.base(y + h + 60, 30, fx.cardM), fx.cardM);
         c.save();
         c.translate(x + w / 2, y + h / 2);
         c.scale(s, s);
@@ -336,41 +369,7 @@ final class HomeRows {
             cd.phText.draw(c);
             c.restore();
         }
-        if (cd.cont != null) drawContinue(c, cd, w, h, rad, ia, a);
         if (fc > 0.01f) fx.ring(c, 0, 0, w, h, rad, fc * a);
         c.restore();
-    }
-
-    private void drawContinue(Canvas c, Card cd, float w, float h, float rad, int ia, float a) {
-        Fx f = fx;
-        if (cd.progress > 0) {
-            // Shade under the text and the bar along the bottom edge (cut by a clip so the rounded corners stay).
-            f.fill.setColor(Fx.alpha(0xFF000000, 0.55f * a));
-            c.save();
-            c.clipRect(0, h - 120, w, h);
-            f.rect.set(0, h - 140, w, h);
-            c.drawRoundRect(f.rect, rad, rad, f.fill);
-            c.restore();
-            f.cardLeft.setColor(Fx.alpha(0xFFFFFFFF, a));
-            c.drawText(cd.left, 24, Fx.base(h - 34 - 40, 40, f.cardLeft), f.cardLeft);
-            c.save();
-            c.clipRect(0, h - 12, w, h);
-            f.fill.setColor(Fx.alpha(0xFFFFFFFF, 0.4f * a));
-            f.rect.set(0, h - 40, w, h);
-            c.drawRoundRect(f.rect, rad, rad, f.fill);
-            c.restore();
-            c.save();
-            c.clipRect(0, h - 12, w * Math.min(1, cd.progress), h);
-            f.fill.setColor(Fx.alpha(0xFFFFFFFF, a));
-            c.drawRoundRect(f.rect, rad, rad, f.fill);
-            c.restore();
-        }
-        if (!cd.badge.isEmpty()) {
-            f.fill.setColor(Fx.alpha(0xFF000000, 0.78f * a));
-            f.rect.set(16, 16, 16 + cd.badgeW, 56);
-            c.drawRoundRect(f.rect, 20, 20, f.fill);
-            f.cardTag.setColor(Fx.alpha(0xFFFFFFFF, a));
-            c.drawText(cd.badge, 32, Fx.base(16, 40, f.cardTag), f.cardTag);
-        }
     }
 }
