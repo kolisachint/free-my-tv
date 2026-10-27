@@ -2,12 +2,14 @@
  * Free My TV home mock: SEARCH. Loaded after mock.js; uses its globals (S, E, pic, ring, sym, toast, openDetails...).
  * Keys inside search: arrows move, Enter presses, Esc / right-click = Back, Backspace deletes (Back when empty),
  * any letter / digit / space types (so S, M, N... type letters here). The mic chip + Enter simulates voice.
+ * Down from the keyboard's bottom row (or Right from its last key) lands on the first result.
  */
-var SQ = '', SRES = null, MIC = false, micT = 0, debT = 0, micN = 0, sBuilt = false;
+var SQ = '', SRES = null, MIC = false, micT = 0, micN = 0, sBuilt = false;
 var SF = { a: 'kb', kr: 0, kc: 0, rr: 0, ri: 0 };
-var SLIST = null, SKEYS = [], SRROWS = [], micEl = null, fieldEl = null;
+var SLIST = null, SKEYS = [], SRROWS = [], micEl = null, fieldEl = null, listenEl = null;
+var SHOWN = 3, lazyT = 0;   // titles shown now: 3 at once, 10 after ~300 ms (simulated lazy load)
 var TRENDING = ['Panchayat', 'Spider-Man', 'RRR', 'Scam 1992', 'Mirzapur', 'Netflix'];
-var MIC_PHRASES = ['spider man', 'panchayat', 'rrr'];
+var MIC_PHRASES = ['spider man', 'panchayat', 'rrr', 'play Mirzapur on TV', 'lofi on YouTube'];
 
 /* MARK: - Matching: case/accent-insensitive, word prefix, substring, 1 typo for words >= 4 letters */
 function norm(s) { return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim(); }
@@ -51,10 +53,12 @@ function buildIndex() {
     INDEX.push({ it: it, hay: { t: t, tw: t.split(' '), cw: norm(it.cast.join(' ')).split(' '), gw: norm(it.genres.join(' ')).split(' ') } });
   });
 }
+/* Letters only (spaces do not count). Network-like title results need 3+; apps match from 1 letter. */
+function nlen(raw) { return norm(raw).replace(/ /g, '').length; }
 function searchData(raw) {
   if (!INDEX) buildIndex();
   var q = norm(raw), titles = [], apps = [];
-  INDEX.forEach(function (x) { var s = scoreHay(q, x.hay); if (s) titles.push({ it: x.it, s: s + x.it.rating / 10 }); });
+  if (nlen(raw) >= 3) INDEX.forEach(function (x) { var s = scoreHay(q, x.hay); if (s) titles.push({ it: x.it, s: s + x.it.rating / 10 }); });
   titles.sort(function (a, b) { return b.s - a.s; });
   APPS.forEach(function (a) { var t = norm(a.name); if (scoreHay(q, { t: t, tw: t.split(' '), cw: [], gw: [] })) apps.push(a); });
   return { q: raw, titles: titles.slice(0, 10).map(function (x) { return x.it; }), apps: apps };
@@ -88,6 +92,8 @@ function buildSearch() {
   var kb = E('div', 'skb', P);
   for (i = 0; i < 36; i++) addKey(kb, chars[i], chars[i], Math.floor(i / 6), i % 6, 1);
   addKey(kb, 'Space', ' ', 6, 0, 2); addKey(kb, 'Delete', 'del', 6, 2, 2); addKey(kb, 'Clear', 'clear', 6, 4, 2);
+  listenEl = E('div', 'slisten', P, 'Listening\u2026');
+  listenEl.style.display = 'none';
   E('div', 'sres', P).id = 'sRes';
   sBuilt = true;
 }
@@ -107,7 +113,6 @@ function renderField() {
   var q = fieldEl.querySelector('.sq');
   q.innerHTML = '';
   if (MIC) {
-    E('span', 'ql', q, 'Listening\u2026');
     var lv = E('span', 'lvl', q);
     for (var i = 0; i < 5; i++) E('i', null, lv, null, '-webkit-animation-delay:' + (i * 0.12) + 's;animation-delay:' + (i * 0.12) + 's');
   } else {
@@ -115,6 +120,7 @@ function renderField() {
     E('span', 'caret', q);
   }
   micEl.querySelector('.mlab').textContent = MIC ? 'Listening\u2026' : 'Mic';
+  listenEl.style.display = MIC ? 'block' : 'none';
   stage.classList.toggle('search-duck', MIC);
 }
 function typeKey(v) {
@@ -122,22 +128,35 @@ function typeKey(v) {
   if (SF.a === 'res') SF.a = 'kb';
   if (v === 'del') SQ = SQ.slice(0, -1); else if (v === 'clear') SQ = ''; else if (SQ.length < 40) SQ += v;
   renderField();
-  clearTimeout(debT);
-  if (norm(SQ).length >= 2) debT = setTimeout(runSearch, 300); else runSearch();
+  runSearch();
 }
+/* Results now: top 3 (or the hint + apps for 1-2 letters). After ~300 ms the list fills up to 10. */
 function runSearch() {
-  clearTimeout(debT);
-  SRES = norm(SQ).length >= 2 ? searchData(SQ) : null;
+  clearTimeout(lazyT);
+  SHOWN = 3;
+  SRES = norm(SQ).length ? searchData(SQ) : null;
   renderSearch();
+  if (SRES && SRES.titles.length > SHOWN) lazyT = setTimeout(function () { SHOWN = 10; renderSearch(); }, 300);
 }
 function startMic() {
   if (MIC) return;
-  MIC = true; clearTimeout(debT); renderField();
+  MIC = true; clearTimeout(lazyT); renderField();
   micT = setTimeout(function () {
-    MIC = false; SQ = MIC_PHRASES[micN++ % MIC_PHRASES.length];
-    SF.a = 'res'; SF.rr = 0; SF.ri = 0;
-    renderField(); runSearch(); saveRecent(SQ);
+    MIC = false;
+    applyTranscript(MIC_PHRASES[micN++ % MIC_PHRASES.length]);
   }, 1500);
+}
+/* Transcript from the recognizer (M, or ?voice=). "... on TV" fills OUR box without the tail; "... on YouTube" only toasts. */
+function applyTranscript(t) {
+  t = String(t).replace(/\s+/g, ' ').trim();
+  if (/\s+on\s+youtube$/i.test(t)) {
+    renderField();
+    toast('Opening YouTube search for ' + t.replace(/\s+on\s+youtube$/i, '').replace(/^(play|open)\s+/i, ''));
+    return;
+  }
+  if (/\s+on\s+tv$/i.test(t)) t = t.replace(/\s+on\s+tv$/i, '').replace(/^(play|open)\s+/i, '');
+  SQ = t; SF.a = 'res'; SF.rr = 0; SF.ri = 0;
+  renderField(); runSearch(); saveRecent(SQ);
 }
 function cancelMic() { MIC = false; clearTimeout(micT); renderField(); }
 
@@ -165,10 +184,10 @@ function instChips(it) {
   return out.slice(0, 3).concat(['Stremio']);
 }
 function renderSearch() {
-  var R = $('sRes'), q = norm(SQ), y = 0, i;
+  var R = $('sRes'), q = norm(SQ), y = 0, short = nlen(SQ) > 0 && nlen(SQ) < 3;
   R.innerHTML = ''; SRROWS = []; SLIST = null;
-  if (q.length < 2) {
-    if (q.length === 1) { E('div', 'snote', R, 'Type 2 or more letters to search.', 'top:0px'); y = 60; }
+  if (!q.length || (short && !(SRES && SRES.apps.length))) {
+    if (short) { E('div', 'snote', R, 'Type 3 or more letters', 'top:0px'); y = 60; }
     E('div', 'rlabel', R, 'Recent searches', 'left:0;top:' + y + 'px');
     var rec = getRecent();
     if (rec.length) y = chipRows(R, rec, y + 64, pickQuery) + 24;
@@ -181,7 +200,8 @@ function renderSearch() {
     E('div', 'rlabel', R, 'Trending', 'left:0;top:190px');
     chipRows(R, TRENDING, 254, pickQuery);
   } else if (SRES) {
-    var t = SRES.titles, list = [], TH = 340, GAP = 32, ay = 12;
+    var t = SRES.titles.slice(0, SHOWN), list = [], TH = 340, GAP = 32, ay = 12;
+    if (short) { E('div', 'snote', R, 'Type 3 or more letters', 'top:0px'); ay = 64; }
     t.forEach(function (it) { list.push({ it: it }); });
     SRES.apps.forEach(function (a) { var o = { app: a }; if (t.length) list.push(o); else list.unshift(o); });
     var clip = E('div', 'sclip', R), strip = E('div', 'sstrip', clip);
@@ -222,25 +242,24 @@ function renderSearch() {
 
 /* MARK: - Focus + navigation */
 function applyFocus() {
-  var all = $('search').querySelectorAll('.focus'), i;
-  for (i = 0; i < all.length; i++) all[i].classList.remove('focus');
-  if (S.zone !== 'search') return;
-  var el = null;
-  if (SF.a === 'field') el = micEl;
-  else if (SF.a === 'kb') { var k = kbAt(SF.kr, SF.kc); el = k && k.el; }
-  else if (SRROWS[SF.rr]) {
-    var r = SRROWS[SF.rr]; el = r.els[SF.ri];
+  var all = $('search').querySelectorAll('.focus, .pre'), i;
+  for (i = 0; i < all.length; i++) { all[i].classList.remove('focus'); all[i].classList.remove('pre'); }
+  /* first result is highlighted as soon as results appear; focus stays on the keyboard until Right / Down */
+  if (SLIST && SRROWS[0]) SRROWS[0].els[0].classList.add('pre');
+  if (S.zone === 'search') {
+    var el = null;
+    if (SF.a === 'field') el = micEl;
+    else if (SF.a === 'kb') { var k = kbAt(SF.kr, SF.kc); el = k && k.el; }
+    else if (SRROWS[SF.rr]) el = SRROWS[SF.rr].els[SF.ri];
+    if (el) el.classList.add('focus');
   }
-  if (el) el.classList.add('focus');
   if (SLIST) listScroll();
 }
-/* vertical result list: keep the focused tile fully in view (translateY), count "2 / 9", load images near focus only */
+/* vertical result list: keep the focused tile inside the 800 px clip (translateY), count "2 / 9", load images near focus only */
 function listScroll() {
-  var f = SF.a === 'res' ? SF.rr : 0, t = SLIST.tiles, cur = t[f], ty = 0, n = t.length, i;
-  var top = cur.y - 12, bot = cur.y + cur.h + 24;
-  ty = -Math.max(0, f === 0 ? 0 : Math.min(top, bot - 790));
-  if (SLIST.ty != null && SF.a !== 'res') ty = SLIST.ty;
-  SLIST.ty = ty;
+  var f = SF.a === 'res' ? SF.rr : 0, t = SLIST.tiles, cur = t[f], n = t.length, i;
+  var H = stage.classList.contains('search-duck') ? 650 : 800, ty = 0;   // clip height (650 while listening)
+  if (cur.y + cur.h > H - 24) ty = H - 24 - cur.y - cur.h;
   SLIST.strip.style.webkitTransform = SLIST.strip.style.transform = 'translateY(' + ty + 'px)';
   for (i = 0; i < n; i++) if (t[i].el.querySelector('.img')) cardPic(t[i].el, Math.abs(i - f) <= 2);
   var c = $('sCount'); c.style.display = SF.a === 'res' ? 'block' : 'none'; c.textContent = (f + 1) + ' / ' + n;
@@ -254,6 +273,7 @@ function searchMove(dx, dy) {
     else if (dx > 0) { n = kbAt(f.kr, k.c + k.s); if (n) f.kc = n.c; else if (SRROWS.length) { f.a = 'res'; f.rr = 0; f.ri = 0; } }
     else if (dy < 0) { if (f.kr === 0) f.a = 'field'; else { f.kr--; f.kc = kbAt(f.kr, k.c).c; } }
     else if (dy > 0 && f.kr < 6) { f.kr++; f.kc = kbAt(f.kr, k.c).c; }
+    else if (dy > 0 && SRROWS.length) { f.a = 'res'; f.rr = 0; f.ri = 0; }
   } else {
     var r = SRROWS[f.rr];
     if (dx < 0) { if (f.ri > 0) f.ri--; else f.a = 'kb'; }
@@ -288,31 +308,34 @@ function openSearch(q) {
   if (!sBuilt) buildSearch();
   S.zone = 'search';
   stage.classList.add('search-open');
-  SQ = q || ''; MIC = false; clearTimeout(micT); clearTimeout(debT);
+  SQ = q || ''; MIC = false; clearTimeout(micT); clearTimeout(lazyT);
   SF = { a: 'kb', kr: 0, kc: 0, rr: 0, ri: 0 };
   renderField(); runSearch();
 }
 function closeSearch() {
   stage.classList.remove('search-open');
-  MIC = false; clearTimeout(micT); clearTimeout(debT);
+  MIC = false; clearTimeout(micT); clearTimeout(lazyT);
+  renderField();
   S.zone = 'top';
   setFocus('top', 0);
 }
 /* Overview: render the screen with a sample query, clone it, put the live screen back as it was. */
 function searchSnapshot(q) {
   if (!sBuilt) buildSearch();
-  var sq = SQ, sf = SF, sm = MIC, sz = S.zone;
+  var sq = SQ, sf = SF, sm = MIC, sz = S.zone, sh = SHOWN;
   S.zone = 'x'; MIC = false; SQ = q; SF = { a: 'kb', kr: 0, kc: 0, rr: 0, ri: 0 };
-  renderField(); SRES = searchData(q); renderSearch();
+  renderField(); SRES = searchData(q); SHOWN = 10; renderSearch();
   var c = $('search').cloneNode(true);
   c.removeAttribute('id'); c.style.cssText = 'position:absolute;left:0;top:0;width:1920px;height:1080px;opacity:1';
-  SQ = sq; SF = sf; MIC = sm; S.zone = sz;
-  renderField(); SRES = norm(SQ).length >= 2 ? searchData(SQ) : null; renderSearch();
+  SQ = sq; SF = sf; MIC = sm; S.zone = sz; SHOWN = sh;
+  renderField(); SRES = norm(SQ).length ? searchData(SQ) : null; renderSearch();
   return c;
 }
 
-/* MARK: - URL flags: ?search ?search=spider ?search=xyzq ?mic */
+/* MARK: - URL flags: ?search ?search=spider ?search=xyzq ?mic ?voice=Mirzapur%20on%20TV */
+function flagText(v) { try { return decodeURIComponent(String(v).replace(/\+/g, ' ')); } catch (e) { return String(v); } }
 (function () {
-  if (FLAGS.search) { openSearch(FLAGS.search === '1' ? '' : decodeURIComponent(FLAGS.search)); }
+  if (FLAGS.search) { openSearch(FLAGS.search === '1' ? '' : flagText(FLAGS.search)); }
+  if (FLAGS.voice && FLAGS.voice !== '1') { if (S.zone !== 'search') openSearch(); applyTranscript(flagText(FLAGS.voice)); }
   if (FLAGS.mic) { if (S.zone !== 'search') openSearch(); startMic(); }
 })();
