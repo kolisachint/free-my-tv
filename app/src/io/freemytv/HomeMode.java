@@ -340,6 +340,12 @@ final class HomeMode {
             Watchdog.clear(c);
             check(adb.shell("cmd package set-home-activity " + HOME_ACTIVITY), "Success",
                     Ui.tr("Android didn't accept the new home screen"));
+            try {
+                String granted = adb.shell("pm grant " + PKG + " android.permission.RECORD_AUDIO").trim();   // voice search in the app; optional
+                if (!granted.isEmpty()) AppLog.w("microphone permission: " + granted);
+            } catch (IOException e) {
+                AppLog.w("microphone permission not granted, voice search uses the recognizer's screen: " + e.getMessage());
+            }
             adb.shell("settings put secure screensaver_components " + DREAM);
             JSONObject started = state(c);
             started.put("mode", FREE).put("homeReverted", false).put("setupHome", setupHome);
