@@ -71,7 +71,7 @@ final class Prefs {
     }
 
     /**
-     * Reads the file again if another process changed it. On Android 11 the screensaver runs in the main process
+     * Reads the file again if another process changed it. On Android 11 and 12 the screensaver runs in the main process
      * (ScreensaverAlone), which otherwise keeps the values it first read, whatever the settings screen in :home saves.
      */
     @SuppressWarnings("deprecation")

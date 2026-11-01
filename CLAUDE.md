@@ -184,9 +184,9 @@ entries; its system pieces are in `PROTECTED`. USB debugging opens ADB on 5555 t
   Android 9 and older have no RenderNode (`Recording` wraps it, with a Picture there) and no `cmd role`. On Android 8 to 11
   (`Ui.LEGACY`) the home screen skips the GPU layers, draws blurred shadows from cached bitmaps (`Shadows`) and
   rounds images with a shader instead of clipPath: their GPUs (a Mi Box 3's Mali-450) choked on those.
-  Android 11 runs the screensaver as `ScreensaverAlone`, in the main process (its DreamActivity needs the dream in the
-  app's default process, without a home activity); `res/values-v30/bools.xml` picks it, every other version keeps
-  `Screensaver` in `:home`. Keep both in step. `ScreensaverAlone` reads `Prefs` from another process than the
+  Android 11 and 12 run the screensaver as `ScreensaverAlone`, in the main process (their DreamActivity needs the dream
+  in the app's default process, without a home activity; Android 12 on a Sony VH2 crashed on every start otherwise);
+  `res/values-v30/bools.xml` picks it, `values-v33` and older versions keep `Screensaver` in `:home`. Keep both in step. `ScreensaverAlone` reads `Prefs` from another process than the
   settings screen's, so it calls `Prefs.reload()` when it starts (which also re-applies a new language; `HomeData`
   fetches the forecast again when the city changed).
   To check for newer APIs, compile against `platforms/android-26/android.jar`: only AGSL (`RuntimeShader`, guarded

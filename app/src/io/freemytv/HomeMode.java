@@ -36,8 +36,9 @@ final class HomeMode {
     static final String PKG = "io.freemytv";
     static final String HOME_ACTIVITY = PKG + "/" + PKG + ".HomeActivity";
     static final String SETTINGS_ACTIVITY = PKG + "/" + PKG + ".SettingsActivity";
-    /** Our screensaver: on Android 11 the copy that runs in the main process (ScreensaverAlone, #10). */
-    static final String DREAM = PKG + "/" + PKG + (Build.VERSION.SDK_INT == 30 ? ".ScreensaverAlone" : ".Screensaver");
+    /** Our screensaver: on Android 11 and 12 the copy that runs in the main process (ScreensaverAlone, #10). */
+    static final String DREAM = PKG + "/" + PKG
+            + (Build.VERSION.SDK_INT >= 30 && Build.VERSION.SDK_INT <= 32 ? ".ScreensaverAlone" : ".Screensaver");
     static final String FREE = "free", ORIGINAL = "original";
 
     /**
@@ -654,7 +655,7 @@ final class HomeMode {
                     adb.shell("cmd package set-home-activity " + HOME_ACTIVITY);
                     fixed.add(Ui.tr("the home screen"));
                 }
-                // Whole component names: ".ScreensaverAlone" (Android 11) contains ".Screensaver" (12 and newer).
+                // Whole component names: ".ScreensaverAlone" (Android 11, 12) contains ".Screensaver" (13 and newer).
                 if (!reverted && !Arrays.asList(adb.shell("settings get secure screensaver_components").trim().split(",")).contains(DREAM)) {
                     adb.shell("settings put secure screensaver_components " + DREAM);
                     fixed.add(Ui.tr("the screensaver"));
