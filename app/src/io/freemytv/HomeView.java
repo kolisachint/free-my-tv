@@ -104,6 +104,13 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     private int zone = Z_ROWS;
     private int topIndex, focusRow;
     private boolean userMoved;
+    // The whole-home PIN lock (Prefs.pin): locked until the right 4 digits, again after every pause.
+    private boolean locked;
+    private final char[] pinDigits = {' ', ' ', ' ', ' '};   // ' ' = empty slot
+    private int pinSlot;   // the D-pad cursor 0-3 (remotes without digits enter with up/down)
+    private String pinError = "";
+    private TextPaint lockTitle, lockHint, lockError;
+    private String lockTitleText = "", lockHintText = "";
 
     // Night look: darker from sunset to sunrise, with a 2 s transition.
     private boolean nightTarget;
@@ -264,6 +271,12 @@ final class HomeView extends View implements Choreographer.FrameCallback {
         rim.setStyle(Paint.Style.STROKE);
         gridLabel = new TextPaint(Ui.text(Ui.medium, 24, 0x99FFFFFF));
         gridLabel.setTextAlign(Paint.Align.CENTER);
+        lockTitle = new TextPaint(Ui.text(Ui.displaySemibold, 46, 0xFFFFFFFF));
+        lockTitle.setTextAlign(Paint.Align.CENTER);
+        lockHint = new TextPaint(Ui.text(Ui.medium, 26, 0x99FFFFFF));
+        lockHint.setTextAlign(Paint.Align.CENTER);
+        lockError = new TextPaint(Ui.text(Ui.medium, 26, 0xFFFF9E80));
+        lockError.setTextAlign(Paint.Align.CENTER);
         sheetTitle = Ui.text(Ui.displaySemibold, 40, 0xFFFFFFFF);
         sheetTitle.setTextAlign(Paint.Align.CENTER);
         // First time: right away (a cold start opens with the apps already there); missing logos come from reload().
@@ -274,12 +287,15 @@ final class HomeView extends View implements Choreographer.FrameCallback {
             focusRow = rows.first();
             if (focusRow < 0) zone = Z_SHELF;
         }
+        locked = Prefs.hasPin();
     }
 
     private void labels() {
         topLabel[TOP_SEARCH] = Ui.tr("Search");
         topLabel[TOP_INPUTS] = Ui.tr("Inputs");
         topLabel[TOP_SETTINGS] = Ui.tr("Settings");
+        lockTitleText = Ui.tr("Enter PIN");
+        lockHintText = Ui.tr("0-9 or arrows, Back deletes");
         shelfLabel = Ui.tr("Apps");
         rows.relabel();
         setWifi(wifiState);
@@ -329,6 +345,8 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     void resume() {
         if (running) return;
         running = true;
+        syncLock();   // a PIN set or removed in the settings while we were away
+        if (locked) announceForAccessibility(lockTitleText);
         checkNight(false);
         long now = SystemClock.uptimeMillis();
         // Some remotes (Xiaomi's) send one Home press as a burst of 5 to 8, and each one pauses and resumes the home
@@ -359,6 +377,13 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     void pause() {
         if (!running) return;
         running = false;
+        if (Prefs.hasPin() && !voiceAsked) {
+            // Leaving the home (an app, the settings) locks it again: coming back needs the PIN.
+            // Not for the recognizer's own screen: its answer still has to reach onVoice.
+            locked = true;
+            pinClear();
+            pinError = "";
+        }
         cancelReorder(true);
         handler.removeCallbacks(holdStart);
         okHeld = holdArmed = false;
@@ -641,12 +666,17 @@ final class HomeView extends View implements Choreographer.FrameCallback {
         fx.night = night;
         c.save();
         c.scale(k, k);
-        drawPage(c);
-        if (!search.covers()) drawHome(c);
-        if (search.visible()) search.draw(c);
-        if (details.visible()) details.draw(c, w, h);
+        if (locked) {
+            // The lock covers everything, opaque: skip the home beneath (fast on weak GPUs, nothing peeks through).
+            drawLock(c);
+        } else {
+            drawPage(c);
+            if (!search.covers()) drawHome(c);
+            if (search.visible()) search.draw(c);
+            if (details.visible()) details.draw(c, w, h);
+        }
         c.restore();
-        if (sheet.value > 0.001f || sheetOpen) drawSheetLayer(c);
+        if (!locked && (sheet.value > 0.001f || sheetOpen)) drawSheetLayer(c);
         c.save();
         c.scale(k, k);
         drawToast(c);
@@ -943,6 +973,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
      * the words show in the search field as they come); where that can't work, the recognizer's own screen is used.
      */
     void startVoice() {
+        if (locked) return;
         if (voiceLive) {
             stopVoice();
             return;
@@ -1072,6 +1103,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
      * get started (a cold speech service): ask once more, so one press is enough. Otherwise just stop listening.
      */
     void onVoiceCanceled() {
+        if (locked) { endVoice(); return; }   // the answer came back at the lock screen: don't stay listening
         if (!voiceAsked || voiceLive) return;
         boolean quick = SystemClock.uptimeMillis() - voiceAt < VOICE_QUICK_MS;
         boolean retry = quick && !voiceRetried;
@@ -1111,6 +1143,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
      * (also "play X on TV") is our own search for X: the tail never picks an app (it used to match "Apple TV").
      */
     void onVoice(String text) {
+        if (locked) { endVoice(); return; }   // the answer came back at the lock screen: don't stay listening
         endVoice();
         if (text == null || text.trim().isEmpty()) {
             didntCatch();
@@ -1149,6 +1182,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
      * reach HomeActivity): same as a spoken one, "on TV" tail and all.
      */
     void searchFor(String query) {
+        if (locked) return;
         if (query == null || query.trim().isEmpty()) return;
         onVoice(query);
     }
@@ -1621,9 +1655,163 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     private int appsVersion, appsGeneration;
     private long appsAt;
 
+    // MARK: - The home PIN lock: the whole home behind 4 digits (Prefs.pin)
+
+    /** Whether the PIN screen is up (HomeActivity routes every key here while it is). */
+    boolean isLocked() { return locked; }
+
+    /** A PIN set or removed in the settings while paused: lock, or unlock right away. */
+    private void syncLock() {
+        if (!Prefs.hasPin()) {
+            locked = false;
+            pinClear();
+            pinError = "";
+        } else if (!voiceAsked) locked = true;
+        // A voice round-trip pending (pause skipped the relock): stay unlocked for its answer.
+    }
+
+    /** Empty PIN, cursor home. */
+    private void pinClear() {
+        for (int i = 0; i < 4; i++) pinDigits[i] = ' ';
+        pinSlot = 0;
+    }
+
+    /** Digits filled in (0-4). */
+    private int pinFilled() {
+        int n = 0;
+        for (char d : pinDigits) if (d != ' ') n++;
+        return n;
+    }
+
+    /** The next empty PIN slot at or after from (wrapping), or the cursor when all are full. */
+    private int nextEmpty(int from) {
+        for (int k = 0; k < 4; k++) {
+            int i = (from + k) % 4;
+            if (pinDigits[i] == ' ') return i;
+        }
+        return pinSlot;
+    }
+
+    /** Up/down on the cursor slot: empty starts at 0 (up) or 9 (down), then cycles. */
+    private void cycleSlot(int dir) {
+        char cur = pinDigits[pinSlot];
+        int d = cur == ' ' ? (dir > 0 ? 0 : 9) : (cur - '0' + dir + 10) % 10;
+        pinDigits[pinSlot] = (char) ('0' + d);
+        pinError = "";
+        announceForAccessibility(String.valueOf(d));
+        invalidate();
+    }
+
+    /** While locked every key goes here: digits or up/down fill the PIN, Back deletes, nothing leaves. */
+    private boolean pinKey(KeyEvent e) {
+        if (e.getAction() != KeyEvent.ACTION_DOWN || e.getRepeatCount() > 0) return true;
+        wake();
+        int digit = digitOf(e);
+        if (digit >= 0) {
+            pinDigits[pinSlot] = (char) ('0' + digit);
+            pinError = "";
+            pinSlot = nextEmpty(pinSlot + 1);
+            if (pinFilled() == 4) checkPin();
+            else announceForAccessibility(Ui.trf("{n} of 4", "n", pinFilled()));
+            invalidate();
+            return true;
+        }
+        int code = e.getKeyCode();
+        if (code == KeyEvent.KEYCODE_DPAD_UP) {
+            cycleSlot(1);
+            return true;
+        }
+        if (code == KeyEvent.KEYCODE_DPAD_DOWN) {
+            cycleSlot(-1);
+            return true;
+        }
+        if (code == KeyEvent.KEYCODE_DPAD_LEFT) {
+            if (pinSlot > 0) {
+                pinSlot--;
+                invalidate();
+            }
+            return true;
+        }
+        if (code == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            if (pinSlot < 3) {
+                pinSlot++;
+                invalidate();
+            }
+            return true;
+        }
+        if (code == KeyEvent.KEYCODE_DEL || code == KeyEvent.KEYCODE_BACK) {
+            pinDigits[pinSlot] = ' ';
+            if (pinSlot > 0) pinSlot--;
+            pinError = "";
+            invalidate();
+            return true;
+        }
+        if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
+                || code == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+            if (pinFilled() == 4) checkPin();
+            invalidate();
+            return true;
+        }
+        return true;   // locked: swallow the rest (Back never leaves, the mic never listens)
+    }
+
+    /** A remote or keyboard digit 0-9, or -1. */
+    private static int digitOf(KeyEvent e) {
+        int code = e.getKeyCode();
+        if (code >= KeyEvent.KEYCODE_0 && code <= KeyEvent.KEYCODE_9) return code - KeyEvent.KEYCODE_0;
+        if (code >= KeyEvent.KEYCODE_NUMPAD_0 && code <= KeyEvent.KEYCODE_NUMPAD_9) return code - KeyEvent.KEYCODE_NUMPAD_0;
+        int u = e.getUnicodeChar();
+        if (u >= '0' && u <= '9') return u - '0';
+        return -1;
+    }
+
+    /** Four digits in: the right ones open the home until it pauses, wrong ones start over. */
+    private void checkPin() {
+        if (pinFilled() != 4) return;
+        if (!Prefs.hasPin() || Prefs.pin().equals(new String(pinDigits))) {
+            locked = false;
+            pinClear();
+            pinError = "";
+            click.open();
+        } else {
+            pinClear();
+            pinError = Ui.tr("Wrong PIN, try again.");
+            announceForAccessibility(pinError);
+        }
+    }
+
+    /** The PIN screen over the hidden home: a title, 4 dots, and an error or a hint. No allocation. */
+    private void drawLock(Canvas c) {
+        fx.fill.setShader(null);
+        fx.fill.setAlpha(255);
+        fx.fill.setColor(0xFF070B1E);
+        c.drawRect(0, 0, 1920, 1080, fx.fill);
+        c.drawText(lockTitleText, 960, 470 + Ui.halfCap(lockTitle), lockTitle);
+        float y = 580, pitch = 72, x = 960 - pitch * 1.5f;
+        for (int i = 0; i < 4; i++, x += pitch) {
+            if (pinDigits[i] != ' ') {
+                fx.fill.setColor(0xFFFFFFFF);
+                c.drawCircle(x, y, 17, fx.fill);
+            }
+            if (i == pinSlot) {
+                border.setColor(0xFFFFFFFF);
+                border.setStrokeWidth(4);
+                c.drawCircle(x, y, 25, border);
+            } else if (pinDigits[i] == ' ') {
+                border.setColor(0x66FFFFFF);
+                border.setStrokeWidth(3);
+                c.drawCircle(x, y, 17, border);
+            }
+        }
+        boolean wrong = !pinError.isEmpty();
+        c.drawText(wrong ? pinError : lockHintText, 960, 680 + Ui.halfCap(wrong ? lockError : lockHint),
+                wrong ? lockError : lockHint);
+    }
+
     // MARK: - Keys: the arrows, OK and Back, typing in the search; system keys pass through to the system
 
     boolean onKey(KeyEvent e) {
+        if (locked) return pinKey(e);
         wake();
         boolean down = e.getAction() == KeyEvent.ACTION_DOWN;
         if (reordering) return reorderKey(e, down);
@@ -1841,6 +2029,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     }
 
     private void activate() {
+        if (locked) return;   // TalkBack taps on the PIN screen do nothing
         wake();
         if (reordering) {   // TalkBack's click while moving an app: drop it
             dropReorder();

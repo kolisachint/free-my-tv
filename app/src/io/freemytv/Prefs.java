@@ -122,6 +122,16 @@ final class Prefs {
         version++;
     }
 
+    // MARK: - Home PIN (whole-home lock so kids can't watch without it)
+
+    /** The home PIN: "" = off, otherwise 4 digits. */
+    static String pin() { return sp().getString("pin", ""); }
+    static boolean hasPin() { return !pin().isEmpty(); }
+    static void setPin(String pin) {
+        put("pin", pin == null ? "" : pin);
+        writePinLocked();   // the key service (:keys) reads the lock from remote-keys.txt, not SharedPreferences
+    }
+
     /** The home screen's soft click when moving and opening. */
     static boolean sounds() { return sp().getBoolean("sounds", true); }
     static void setSounds(boolean on) { put("sounds", on); }
@@ -210,6 +220,7 @@ final class Prefs {
     }
 
     private static final String[] keyApps = new String[KEYS.length];   // null = the default
+    private static boolean keysPin;   // the home PIN lock is on (remote-keys.txt: pin=1)
     private static long keysStamp = Long.MIN_VALUE;
 
     /** A temporary file per process (two can start together after an update), synced before it replaces the old one. */
@@ -246,11 +257,13 @@ final class Prefs {
             if (stamp != keysStamp) {
                 keysStamp = stamp;
                 java.util.Arrays.fill(keyApps, null);
+                keysPin = false;
                 if (stamp != 0) {
                     try (BufferedReader r = new BufferedReader(new FileReader(f))) {
                         String line;
                         while ((line = r.readLine()) != null) {
-                            for (int i = 0; i < KEYS.length; i++) {
+                            if (line.startsWith("pin=")) keysPin = line.equals("pin=1");
+                            else for (int i = 0; i < KEYS.length; i++) {
                                 String prefix = KEYS[i] + "=";
                                 if (line.startsWith(prefix)) keyApps[i] = line.substring(prefix.length());
                             }
@@ -264,9 +277,31 @@ final class Prefs {
         }
     }
 
+    /** Whether the home PIN lock is on (for the key service, which can't use SharedPreferences). */
+    static boolean pinLocked() {
+        synchronized (keyApps) {
+            keyApp(KEYS[0]);   // re-reads remote-keys.txt when it changed (synchronized is reentrant)
+            return keysPin;
+        }
+    }
+
     static void setKeyApp(int keyCode, String pkg) {
         StringBuilder sb = new StringBuilder();
         for (int key : KEYS) sb.append(key).append('=').append(key == keyCode ? pkg : keyApp(key)).append('\n');
+        appendPin(sb);
         if (writeKeys(sb.toString())) version++;
+    }
+
+    /** Rewrites remote-keys.txt with the current PIN flag (the key service reads it, not SharedPreferences). */
+    private static void writePinLocked() {
+        StringBuilder sb = new StringBuilder();
+        for (int key : KEYS) sb.append(key).append('=').append(keyApp(key)).append('\n');
+        appendPin(sb);
+        writeKeys(sb.toString());
+    }
+
+    /** The PIN flag line for remote-keys.txt. */
+    private static void appendPin(StringBuilder sb) {
+        sb.append("pin=").append(hasPin() ? '1' : '0').append('\n');
     }
 }

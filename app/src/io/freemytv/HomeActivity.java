@@ -73,7 +73,7 @@ public class HomeActivity extends Activity {
     /** Home button pressed on the home screen: back to the entry state (focus on the first app, sheet closed); a search from the Assistant opens our search. */
     @Override protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (home == null) return;
+        if (home == null || home.isLocked()) return;   // the lock screen stays: reset would close nothing visible
         home.reset(true);
         String asked = searchQuery(intent);
         if (asked != null) home.searchFor(asked);
@@ -104,6 +104,13 @@ public class HomeActivity extends Activity {
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if (home != null && home.isLocked()) {
+            // The PIN screen is up: no remote app buttons past us (volume still reaches the system).
+            int code = event.getKeyCode();
+            if (code == KeyEvent.KEYCODE_VOLUME_UP || code == KeyEvent.KEYCODE_VOLUME_DOWN
+                    || code == KeyEvent.KEYCODE_VOLUME_MUTE) return super.dispatchKeyEvent(event);
+            return home.onKey(event);
+        }
         if (RemoteKeys.onKey(this, event)) return true;
         if (home != null && home.onKey(event)) return true;
         return super.dispatchKeyEvent(event);

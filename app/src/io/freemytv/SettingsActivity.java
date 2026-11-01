@@ -17,6 +17,9 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
+import android.text.InputFilter;
+import android.text.InputType;
+import android.text.method.DigitsKeyListener;
 import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.text.TextUtils;
@@ -155,6 +158,7 @@ public class SettingsActivity extends Activity {
         private static final int PICK_CITY = 0, PICK_LANGUAGE = -1;
         private final List<String[]> cities = new ArrayList<>();
         private String cityStatus = "";
+        private Runnable pinPending;   // runs after the current PIN is verified (mode switch, PIN change)
         private final RectF tmp = new RectF(), rowRect = new RectF(), focusBox = new RectF();
         private JSONObject state = new JSONObject(), recs = new JSONObject();
         private boolean hasKey;
@@ -661,8 +665,8 @@ public class SettingsActivity extends Activity {
         // MARK: - Home Settings and Remote Buttons
 
         private static final String[] THEMES = {"auto", "light", "dark"};
-        /** Home Settings: language, theme, my photos, sounds, city. */
-        private static final int PHOTOS_ROW = 2, CITY_ROW = 4;
+        /** Home Settings: language, theme, my photos, sounds, city, PIN. */
+        private static final int PHOTOS_ROW = 2, CITY_ROW = 4, PIN_ROW = 5;
         /** Home Settings rows on screen at once (what fits above the hints at 1080p); a longer list scrolls. */
         private static final int SETTINGS_VISIBLE = 10;
 
@@ -673,6 +677,7 @@ public class SettingsActivity extends Activity {
             l.add(Ui.tr("My Photos"));
             l.add(Ui.tr("Navigation sounds"));
             l.add(Ui.tr("City"));
+            l.add(Ui.tr("Home PIN"));
             return l.toArray(new String[0]);
         }
 
@@ -688,6 +693,7 @@ public class SettingsActivity extends Activity {
                     : Prefs.photos() ? Ui.plural("plural|one:{n} photo|other:{n} photos", photos) : Ui.tr("Off");
             v[3] = onOff(Prefs.sounds());
             v[CITY_ROW] = !cityStatus.isEmpty() ? cityStatus : Prefs.city().isEmpty() ? "—" : Prefs.city();
+            v[PIN_ROW] = Prefs.hasPin() ? Ui.tr("On") : Ui.tr("Off");
             return v;
         }
 
@@ -812,6 +818,95 @@ public class SettingsActivity extends Activity {
                     .setNegativeButton(Ui.tr("Cancel"), null)
                     .show();
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).requestFocus();   // one stray OK keeps them
+        }
+
+        /** OK on Home PIN: sets it, or (with the current one first) changes or removes it. */
+        private void askPin() {
+            if (!Prefs.hasPin()) {
+                askNewPin(null, Ui.tr("Enter a 4-digit PIN"));
+                return;
+            }
+            pinPending = () -> new AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle(Ui.tr("Home PIN"))
+                    .setItems(new String[] {Ui.tr("Change"), Ui.tr("Remove")}, (d, which) -> {
+                        if (which == 0) askNewPin(null, Ui.tr("Enter a 4-digit PIN"));
+                        else askRemovePin();
+                    })
+                    .setNegativeButton(Ui.tr("Cancel"), (d, which) -> pinPending = null)
+                    .setOnCancelListener(d -> pinPending = null)   // Back drops the pending change too
+                    .show();
+            askCurrentPin(Ui.tr("Enter the current PIN"));
+        }
+
+        /** Runs action now, or after the current PIN is verified (the mode switch needs it too). */
+        private void withPin(Runnable action) {
+            if (!Prefs.hasPin()) {
+                action.run();
+                return;
+            }
+            pinPending = action;
+            askCurrentPin(Ui.tr("Enter the current PIN"));
+        }
+
+        /** The current PIN, then pinPending runs; Back/Cancel drops it. */
+        private void askCurrentPin(String title) {
+            EditText field = pinField();
+            new AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle(title)
+                    .setView(field)
+                    .setPositiveButton(Ui.tr("OK"), (d, which) -> {
+                        if (Prefs.hasPin() && field.getText().toString().equals(Prefs.pin())) {
+                            Runnable action = pinPending;
+                            pinPending = null;
+                            if (action != null) action.run();
+                        } else {
+                            askCurrentPin(Ui.tr("Wrong PIN, try again."));
+                        }
+                    })
+                    .setNegativeButton(Ui.tr("Cancel"), (d, which) -> pinPending = null)
+                    .setOnCancelListener(d -> pinPending = null)   // Back drops the pending action too
+                    .show();
+        }
+
+        /** A new 4-digit PIN, entered twice (first holds the first entry, null while setting). */
+        private void askNewPin(String first, String title) {
+            EditText field = pinField();
+            new AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle(title)
+                    .setView(field)
+                    .setPositiveButton(Ui.tr("OK"), (d, which) -> {
+                        String entered = field.getText().toString();
+                        if (!entered.matches("[0-9]{4}")) {
+                            askNewPin(first, Ui.tr("PINs are 4 digits."));
+                        } else if (first == null) {
+                            askNewPin(entered, Ui.tr("Enter the PIN again"));
+                        } else if (!entered.equals(first)) {
+                            askNewPin(null, Ui.tr("The two PINs don't match."));
+                        } else {
+                            Prefs.setPin(entered);
+                            invalidate();
+                            spoken.focusMoved();
+                        }
+                    })
+                    .setNegativeButton(Ui.tr("Cancel"), null)
+                    .show();
+        }
+
+        /** The current PIN was already verified by askPin. */
+        private void askRemovePin() {
+            Prefs.setPin("");
+            invalidate();
+            spoken.focusMoved();
+        }
+
+        /** A 4-digit numeric password field for the PIN dialogs. */
+        private EditText pinField() {
+            EditText field = new EditText(activity);
+            field.setSingleLine(true);
+            field.setKeyListener(DigitsKeyListener.getInstance("0123456789"));
+            field.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+            field.setFilters(new InputFilter[] {new InputFilter.LengthFilter(4)});
+            return field;
         }
 
         private void searchCity(String name) {
@@ -1041,14 +1136,21 @@ public class SettingsActivity extends Activity {
         private void activate() {
             Context c = getContext();
             if (screen == HOME_CHOICE) {
-                boolean wantFree = focus == 0;
-                boolean already = wantFree ? freeActive() : HomeMode.ORIGINAL.equals(state.optString("mode", HomeMode.ORIGINAL));
-                if (!already && !busy()) {
-                    HomeMode.request(c, wantFree ? HomeMode.FREE : HomeMode.ORIGINAL);
-                    pendingAt = SystemClock.uptimeMillis();
-                }
-                screen = MAIN;
-                focus = 0;
+                // The way back out of Free My TV mode: needs the current PIN when one is set.
+                withPin(() -> {
+                    boolean wantFree = focus == 0;
+                    boolean already = wantFree ? freeActive() : HomeMode.ORIGINAL.equals(state.optString("mode", HomeMode.ORIGINAL));
+                    if (!already && !busy()) {
+                        HomeMode.request(c, wantFree ? HomeMode.FREE : HomeMode.ORIGINAL);
+                        pendingAt = SystemClock.uptimeMillis();
+                    }
+                    screen = MAIN;
+                    focus = 0;
+                    for (Spring s : pop) s.snap(0);
+                    invalidate();
+                    spoken.focusMoved();
+                });
+                return;
             } else if (screen == PICKER && pickFor == PICK_CITY) {
                 String[] city = cities.get(pickScroll + focus);
                 Prefs.setCity(city[1], city[2], city[3]);
@@ -1080,6 +1182,9 @@ public class SettingsActivity extends Activity {
             } else if (screen == HOME_SETTINGS && pickScroll + focus == PHOTOS_ROW) {
                 askRemovePhotos();
                 return;
+            } else if (screen == HOME_SETTINGS && pickScroll + focus == PIN_ROW) {
+                askPin();
+                return;
             } else if (screen == HOME_SETTINGS) {
                 adjust(1);
                 invalidate();
@@ -1089,6 +1194,17 @@ public class SettingsActivity extends Activity {
                 screen = HOME_CHOICE;
                 focus = freeActive() ? 0 : 1;
             } else if (focus == 1) {
+                if (Prefs.hasPin()) {
+                    // The preview shows the picks: needs the current PIN.
+                    withPin(() -> {
+                        pause();
+                        activity.showPreview();
+                        for (Spring s : pop) s.snap(0);
+                        invalidate();
+                        spoken.focusMoved();
+                    });
+                    return;
+                }
                 pause();
                 activity.showPreview();
             } else if (focus == 2) {
@@ -1105,6 +1221,16 @@ public class SettingsActivity extends Activity {
                 screen = REMOTE_KEYS;
                 focus = 0;
             } else {
+                if (Prefs.hasPin()) {
+                    // The TV settings escape the home: needs the current PIN.
+                    withPin(() -> {
+                        activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                        for (Spring s : pop) s.snap(0);
+                        invalidate();
+                        spoken.focusMoved();
+                    });
+                    return;
+                }
                 activity.startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             }
             for (Spring s : pop) s.snap(0);

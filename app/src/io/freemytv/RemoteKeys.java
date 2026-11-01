@@ -68,7 +68,9 @@ final class RemoteKeys {
         if (!ours) return false;
         String pkg = Prefs.keyApp(keyCode);
         if (pkg.isEmpty()) return false;   // "Nothing": the key goes on as if we weren't here
-        if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) {
+        // The lock screen is up: app buttons do nothing (the Home button still opens it).
+        if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0 && Prefs.pinLocked()
+                && !pkg.equals(HomeMode.PKG)) return true;
             // Our own package means the home screen in use (Xiaomi's Mi button): ours, or the TV's own after the
             // watchdog handed it back. Not the settings app our launcher icon opens.
             Intent intent = pkg.equals(HomeMode.PKG)
@@ -76,7 +78,6 @@ final class RemoteKeys {
                     : launchIntent(c.getPackageManager(), pkg);
             AppLog.w("remote key " + e.getKeyCode() + " -> " + pkg + (intent == null ? " (not installed)" : ""));
             if (intent != null) c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-        }
         return true;
     }
 
