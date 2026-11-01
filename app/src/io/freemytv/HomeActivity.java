@@ -111,7 +111,7 @@ public class HomeActivity extends Activity {
                     || code == KeyEvent.KEYCODE_VOLUME_MUTE) return super.dispatchKeyEvent(event);
             return home.onKey(event);
         }
-        if (RemoteKeys.onKey(this, event)) return true;
+        if (RemoteKeys.onKey(this, event, false)) return true;
         if (home != null && home.onKey(event)) return true;
         return super.dispatchKeyEvent(event);
     }

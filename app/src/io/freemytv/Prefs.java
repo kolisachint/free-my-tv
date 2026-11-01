@@ -2,6 +2,7 @@ package io.freemytv;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.SystemClock;
 import android.view.KeyEvent;
 
 import java.io.BufferedReader;
@@ -129,8 +130,69 @@ final class Prefs {
     static boolean hasPin() { return !pin().isEmpty(); }
     static void setPin(String pin) {
         put("pin", pin == null ? "" : pin);
-        writePinLocked();   // the key service (:keys) reads the lock from remote-keys.txt, not SharedPreferences
+        // An open session stays open: the parent changing the PIN in the settings already entered it.
+        // The key service (:keys) reads the lock from remote-keys.txt, not SharedPreferences.
+        if (!writePinLocked()) AppLog.w("PIN: could not tell the key service");
+        if (hasPin()) HomeMode.ensureRemoteService(app, 0);   // the lock needs it (it blocks keys and apps)
     }
+
+    // Wrong PINs in a row (this process: the home screen and its settings). From the 5th, a pause before the next
+    // try: 30 s, doubling up to 5 min. Never a lockout.
+    private static int pinFails;
+    private static long pinWaitUntil;
+
+    /** Milliseconds before the next PIN try is taken (0 = now). */
+    static long pinWait() {
+        return Math.max(0, pinWaitUntil - SystemClock.elapsedRealtime());
+    }
+
+    /** Checks a PIN entry and counts the wrong ones. False while a pause runs, whatever was entered. */
+    static boolean checkPin(String entered) {
+        if (pinWait() > 0) return false;
+        if (hasPin() && pin().equals(entered)) {
+            pinFails = 0;
+            return true;
+        }
+        if (++pinFails >= 5) {
+            pinWaitUntil = SystemClock.elapsedRealtime() + Math.min(300_000L, 30_000L << Math.min(pinFails - 5, 4));
+        }
+        return false;
+    }
+
+    // The unlocked session: from the right PIN (home or settings) until the lock screen shows again. The key service
+    // reads it from remote-keys.txt ("session=<boot>:<elapsedRealtime>", so a clock change or a reboot can't move it)
+    // and also ends it on screen off and on its own restart.
+    private static volatile long sessionOwn;
+    private static int bootCount = Integer.MIN_VALUE;
+
+    /** This boot's number (Settings.Global.BOOT_COUNT), or -1. */
+    static int bootCount() {
+        if (bootCount == Integer.MIN_VALUE) {
+            bootCount = android.provider.Settings.Global.getInt(app.getContentResolver(),
+                    android.provider.Settings.Global.BOOT_COUNT, -1);
+        }
+        return bootCount;
+    }
+
+    /** The right PIN was entered: the remote's buttons and other apps work until the lock shows again. */
+    static void startSession() {
+        sessionOwn = SystemClock.elapsedRealtime();
+        writePinLocked();
+    }
+
+    /** The lock screen is up again. */
+    static void endSession() {
+        // Also a session left in the file by a home process the system killed meanwhile (this one never started it).
+        synchronized (keyApps) {
+            keyApp(KEYS[0]);
+            if (sessionOwn == 0 && keysSession == 0) return;
+        }
+        sessionOwn = 0;
+        writePinLocked();
+    }
+
+    /** In this process (:home): whether the PIN was entered since the lock screen last showed. */
+    static boolean sessionOwnOpen() { return sessionOwn != 0; }
 
     /** The home screen's soft click when moving and opening. */
     static boolean sounds() { return sp().getBoolean("sounds", true); }
@@ -221,7 +283,9 @@ final class Prefs {
 
     private static final String[] keyApps = new String[KEYS.length];   // null = the default
     private static boolean keysPin;   // the home PIN lock is on (remote-keys.txt: pin=1)
-    private static long keysStamp = Long.MIN_VALUE;
+    private static long keysStamp = Long.MIN_VALUE, keysReadAt;
+    private static long keysSession;   // when the right PIN was last entered (remote-keys.txt: session=), 0 = locked
+    private static int keysSessionBoot = Integer.MIN_VALUE;   // the boot it was entered in
 
     /** A temporary file per process (two can start together after an update), synced before it replaces the old one. */
     private static boolean writeKeys(String text) {
@@ -254,15 +318,26 @@ final class Prefs {
         synchronized (keyApps) {
             File f = keysFile();
             long stamp = f.lastModified() * 31 + f.length();   // 0 without the file: every key opens its default
-            if (stamp != keysStamp) {
+            // Also read again after a second: two writes within the file system's time step can keep the same stamp
+            // (pin=1 and pin=0 have the same length).
+            long now = SystemClock.elapsedRealtime();
+            if (stamp != keysStamp || now - keysReadAt > 1000) {
                 keysStamp = stamp;
+                keysReadAt = now;
                 java.util.Arrays.fill(keyApps, null);
                 keysPin = false;
+                keysSession = 0;
+                keysSessionBoot = Integer.MIN_VALUE;
                 if (stamp != 0) {
                     try (BufferedReader r = new BufferedReader(new FileReader(f))) {
                         String line;
                         while ((line = r.readLine()) != null) {
                             if (line.startsWith("pin=")) keysPin = line.equals("pin=1");
+                            else if (line.startsWith("session=")) {
+                                String[] s = line.substring(8).split(":");
+                                keysSessionBoot = s.length == 2 ? (int) parseLong(s[0]) : Integer.MIN_VALUE;
+                                keysSession = s.length == 2 ? parseLong(s[1]) : 0;
+                            }
                             else for (int i = 0; i < KEYS.length; i++) {
                                 String prefix = KEYS[i] + "=";
                                 if (line.startsWith(prefix)) keyApps[i] = line.substring(prefix.length());
@@ -277,7 +352,7 @@ final class Prefs {
         }
     }
 
-    /** Whether the home PIN lock is on (for the key service, which can't use SharedPreferences). */
+    /** Whether a home PIN is set (for the key service, which can't use SharedPreferences). */
     static boolean pinLocked() {
         synchronized (keyApps) {
             keyApp(KEYS[0]);   // re-reads remote-keys.txt when it changed (synchronized is reentrant)
@@ -285,23 +360,46 @@ final class Prefs {
         }
     }
 
+    /** For the key service: whether the right PIN was entered after since (elapsedRealtime, this boot), lock not back. */
+    static boolean sessionOpen(long since) {
+        synchronized (keyApps) {
+            keyApp(KEYS[0]);
+            return keysSession != 0 && keysSessionBoot == bootCount() && keysSession > since
+                    && keysSession <= SystemClock.elapsedRealtime();
+        }
+    }
+
+    private static long parseLong(String s) {
+        try {
+            return Long.parseLong(s.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
     static void setKeyApp(int keyCode, String pkg) {
-        StringBuilder sb = new StringBuilder();
-        for (int key : KEYS) sb.append(key).append('=').append(key == keyCode ? pkg : keyApp(key)).append('\n');
-        appendPin(sb);
-        if (writeKeys(sb.toString())) version++;
+        synchronized (keyApps) {
+            StringBuilder sb = new StringBuilder();
+            for (int key : KEYS) sb.append(key).append('=').append(key == keyCode ? pkg : keyApp(key)).append('\n');
+            appendPin(sb);
+            if (writeKeys(sb.toString())) version++;
+        }
     }
 
     /** Rewrites remote-keys.txt with the current PIN flag (the key service reads it, not SharedPreferences). */
-    private static void writePinLocked() {
-        StringBuilder sb = new StringBuilder();
-        for (int key : KEYS) sb.append(key).append('=').append(keyApp(key)).append('\n');
-        appendPin(sb);
-        writeKeys(sb.toString());
+    private static boolean writePinLocked() {
+        synchronized (keyApps) {   // the UI thread and Recovery's binder thread both write (one temp file per process)
+            StringBuilder sb = new StringBuilder();
+            for (int key : KEYS) sb.append(key).append('=').append(keyApp(key)).append('\n');
+            appendPin(sb);
+            return writeKeys(sb.toString());
+        }
     }
 
-    /** The PIN flag line for remote-keys.txt. */
+    /** The PIN flag and session lines for remote-keys.txt. */
     private static void appendPin(StringBuilder sb) {
         sb.append("pin=").append(hasPin() ? '1' : '0').append('\n');
+        long s = sessionOwn;
+        sb.append("session=").append(s == 0 ? "0" : bootCount() + ":" + s).append('\n');
     }
 }

@@ -276,5 +276,6 @@
  "{n} min ago": "{n} min ago",
  "{n} ms": "{n} ms",
  "{n} of 4": "{n} of 4",
- "← → to move · OK to drop · Back to cancel": "← → to move · OK to drop · Back to cancel"
+ "← → to move · OK to drop · Back to cancel": "← → to move · OK to drop · Back to cancel",
+ "Too many tries. Wait {n} s.": "Too many tries. Wait {n} s."
 }

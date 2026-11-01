@@ -49,13 +49,68 @@ final class RemoteKeys {
         return maker.equalsIgnoreCase(Build.MANUFACTURER) || maker.equalsIgnoreCase(Build.BRAND);
     }
 
-    /** Opens the app for this key on its first press. True if the key is ours and in use (it is then consumed). */
-    static boolean onKey(Context c, KeyEvent e) {
+    /**
+     * Opens the app for this key on its first press. True if the key is ours and in use (it is then consumed).
+     * locked: a home PIN is set and wasn't entered (RemoteKeyService). Then only the keys the PIN screen needs, volume,
+     * power and Home go on; every other key (app buttons, gear, Input, TV, menus) stops here, on every brand.
+     */
+    static boolean onKey(Context c, KeyEvent e, boolean locked) {
+        if (locked) {
+            if (passesLock(e.getKeyCode())) return false;
+            // An app button set to open the home screen (Xiaomi's Mi button) still does: that's the PIN screen.
+            int key = supported() ? keyCode(e) : 0;
+            if (key != 0 && HomeMode.PKG.equals(Prefs.keyApp(key))) {
+                if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) launch(c, e, HomeMode.PKG);
+            }
+            return true;
+        }
         if (!supported()) return false;
+        int keyCode = keyCode(e);
+        if (keyCode == 0) return false;
+        boolean ours = false;
+        for (int key : Prefs.KEYS) ours |= key == keyCode;
+        if (!ours) return false;
+        String pkg = Prefs.keyApp(keyCode);
+        if (pkg.isEmpty()) return false;   // "Nothing": the key goes on as if we weren't here
+        if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) launch(c, e, pkg);
+        return true;   // the release and repeats of a key in use are ours too
+    }
+
+    /** Keys that go on while locked: the PIN screen's (arrows, OK, Back, digits), volume, power and Home. */
+    private static boolean passesLock(int code) {
+        if (code >= KeyEvent.KEYCODE_0 && code <= KeyEvent.KEYCODE_9) return true;
+        if (code >= KeyEvent.KEYCODE_NUMPAD_0 && code <= KeyEvent.KEYCODE_NUMPAD_9) return true;
+        switch (code) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+            case KeyEvent.KEYCODE_NUMPAD_ENTER:
+            case KeyEvent.KEYCODE_BACK:
+            case KeyEvent.KEYCODE_DEL:
+            case KeyEvent.KEYCODE_HOME:
+            case KeyEvent.KEYCODE_VOLUME_UP:
+            case KeyEvent.KEYCODE_VOLUME_DOWN:
+            case KeyEvent.KEYCODE_VOLUME_MUTE:
+            case KeyEvent.KEYCODE_POWER:
+            case KeyEvent.KEYCODE_TV_POWER:
+            case KeyEvent.KEYCODE_SLEEP:
+            case KeyEvent.KEYCODE_SOFT_SLEEP:
+            case KeyEvent.KEYCODE_WAKEUP:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** The key as Settings > Remote Buttons names it (brand codes resolved), or 0 for a gamepad's. */
+    private static int keyCode(KeyEvent e) {
         // BUTTON_3 is also a game controller's button: keys from a gamepad or a joystick are left alone.
         int source = e.getSource();
         if ((source & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
-                || (source & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK) return false;
+                || (source & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK) return 0;
         int keyCode = e.getKeyCode() == KEY_YOUTUBE_TCL ? Prefs.KEY_YOUTUBE : e.getKeyCode();
         // Sony sends BUTTON_9 for five app buttons (BUTTON_4 for Netflix, BUTTON_8 for Google Play): only the scan code
         // tells them apart.
@@ -63,22 +118,17 @@ final class RemoteKeys {
                 || keyCode == KeyEvent.KEYCODE_BUTTON_9)) {
             keyCode = Prefs.SONY_KEY + e.getScanCode();
         }
-        boolean ours = false;
-        for (int key : Prefs.KEYS) ours |= key == keyCode;
-        if (!ours) return false;
-        String pkg = Prefs.keyApp(keyCode);
-        if (pkg.isEmpty()) return false;   // "Nothing": the key goes on as if we weren't here
-        // The lock screen is up: app buttons do nothing (the Home button still opens it).
-        if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0 && Prefs.pinLocked()
-                && !pkg.equals(HomeMode.PKG)) return true;
-            // Our own package means the home screen in use (Xiaomi's Mi button): ours, or the TV's own after the
-            // watchdog handed it back. Not the settings app our launcher icon opens.
-            Intent intent = pkg.equals(HomeMode.PKG)
-                    ? new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-                    : launchIntent(c.getPackageManager(), pkg);
-            AppLog.w("remote key " + e.getKeyCode() + " -> " + pkg + (intent == null ? " (not installed)" : ""));
-            if (intent != null) c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-        return true;
+        return keyCode;
+    }
+
+    private static void launch(Context c, KeyEvent e, String pkg) {
+        // Our own package means the home screen in use (Xiaomi's Mi button): ours, or the TV's own after the
+        // watchdog handed it back. Not the settings app our launcher icon opens.
+        Intent intent = pkg.equals(HomeMode.PKG)
+                ? new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                : launchIntent(c.getPackageManager(), pkg);
+        AppLog.w("remote key " + e.getKeyCode() + " -> " + pkg + (intent == null ? " (not installed)" : ""));
+        if (intent != null) c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     }
 
     /** The app's TV launcher, or its plain one (kept here, not in HomeApps, so the key process stays small). */

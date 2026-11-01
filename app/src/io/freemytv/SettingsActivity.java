@@ -2,9 +2,11 @@ package io.freemytv;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.BlurMaskFilter;
@@ -57,6 +59,24 @@ public class SettingsActivity extends Activity {
         Ui.init(this);
         view = new SettingsView(this);
         setContentView(view);
+        registerReceiver(screenOff, new IntentFilter(Intent.ACTION_SCREEN_OFF));
+    }
+
+    /** Screen off with a home PIN: the session ends and the settings close (the TV wakes on the PIN screen). */
+    private final BroadcastReceiver screenOff = new BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) {
+            if (!Prefs.hasPin()) return;
+            Prefs.endSession();
+            finish();
+        }
+    };
+
+    @Override protected void onDestroy() {
+        try {
+            unregisterReceiver(screenOff);
+        } catch (RuntimeException ignored) {   // never registered (Fire TV handed over to its home)
+        }
+        super.onDestroy();
     }
 
     /**
@@ -77,6 +97,12 @@ public class SettingsActivity extends Activity {
         super.onResume();
         if (view == null) return;
         view.resume();
+        // With a home PIN, these settings ask for it too (the Assistant can open them: "open Free My TV"), unless it was
+        // just entered on the home screen.
+        if (Prefs.hasPin() && !Prefs.sessionOwnOpen()) {
+            view.askEntryPin();
+            return;
+        }
         // From ADB: am start -n io.freemytv/.SettingsActivity --ez screensaver true (straight to the preview).
         if (preview == null && getIntent().getBooleanExtra("screensaver", false)) {
             getIntent().removeExtra("screensaver");
@@ -838,9 +864,37 @@ public class SettingsActivity extends Activity {
             askCurrentPin(Ui.tr("Enter the current PIN"));
         }
 
+        private AlertDialog entryPin;
+
+        /** The PIN before anything here: the right one opens the settings (and the TV, like on the home screen). */
+        void askEntryPin() {
+            if (entryPin != null && entryPin.isShowing()) return;
+            EditText field = pinField();
+            String wait = waitText();
+            entryPin = new AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle(wait != null ? wait : Ui.tr("Enter PIN"))
+                    .setView(field)
+                    .setPositiveButton(Ui.tr("OK"), (d, which) -> {
+                        entryPin = null;
+                        if (Prefs.checkPin(field.getText().toString())) Prefs.startSession();
+                        else askEntryPin();
+                    })
+                    .setNegativeButton(Ui.tr("Cancel"), (d, which) -> activity.finish())
+                    .setOnCancelListener(d -> activity.finish())   // Back leaves the settings
+                    .create();
+            entryPin.setCanceledOnTouchOutside(false);
+            entryPin.show();
+        }
+
+        /** "Too many tries. Wait 30 s." while wrong PINs pause the next try, else null. */
+        private static String waitText() {
+            long wait = Prefs.pinWait();
+            return wait > 0 ? Ui.trf("Too many tries. Wait {n} s.", "n", (wait + 999) / 1000) : null;
+        }
+
         /** Runs action now, or after the current PIN is verified (the mode switch needs it too). */
         private void withPin(Runnable action) {
-            if (!Prefs.hasPin()) {
+            if (!Prefs.hasPin() || Prefs.sessionOwnOpen()) {   // entered on the way in
                 action.run();
                 return;
             }
@@ -855,12 +909,13 @@ public class SettingsActivity extends Activity {
                     .setTitle(title)
                     .setView(field)
                     .setPositiveButton(Ui.tr("OK"), (d, which) -> {
-                        if (Prefs.hasPin() && field.getText().toString().equals(Prefs.pin())) {
+                        if (Prefs.checkPin(field.getText().toString())) {
                             Runnable action = pinPending;
                             pinPending = null;
                             if (action != null) action.run();
                         } else {
-                            askCurrentPin(Ui.tr("Wrong PIN, try again."));
+                            String wait = waitText();
+                            askCurrentPin(wait != null ? wait : Ui.tr("Wrong PIN, try again."));
                         }
                     })
                     .setNegativeButton(Ui.tr("Cancel"), (d, which) -> pinPending = null)

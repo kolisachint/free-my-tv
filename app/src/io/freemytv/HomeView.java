@@ -1668,6 +1668,7 @@ final class HomeView extends View implements Choreographer.FrameCallback {
             pinError = "";
         } else if (!voiceAsked) locked = true;
         // A voice round-trip pending (pause skipped the relock): stay unlocked for its answer.
+        if (locked) Prefs.endSession();   // the lock is back: the remote's buttons and other apps stop again
     }
 
     /** Empty PIN, cursor home. */
@@ -1768,16 +1769,27 @@ final class HomeView extends View implements Choreographer.FrameCallback {
     /** Four digits in: the right ones open the home until it pauses, wrong ones start over. */
     private void checkPin() {
         if (pinFilled() != 4) return;
-        if (!Prefs.hasPin() || Prefs.pin().equals(new String(pinDigits))) {
+        if (!Prefs.hasPin() || Prefs.checkPin(new String(pinDigits))) {
+            Prefs.startSession();   // before anything can open: the key service lets apps through from now
             locked = false;
             pinClear();
             pinError = "";
             click.open();
-        } else {
-            pinClear();
-            pinError = Ui.tr("Wrong PIN, try again.");
-            announceForAccessibility(pinError);
+            return;
         }
+        pinClear();
+        long wait = Prefs.pinWait();
+        pinError = wait > 0 ? Ui.trf("Too many tries. Wait {n} s.", "n", (wait + 999) / 1000)
+                : Ui.tr("Wrong PIN, try again.");
+        announceForAccessibility(pinError);
+        if (wait > 0) postDelayed(this::pinWaited, wait);
+    }
+
+    /** The pause after wrong PINs is over: the hint comes back. */
+    private void pinWaited() {
+        if (!locked || Prefs.pinWait() > 0) return;
+        pinError = "";
+        invalidate();
     }
 
     /** The PIN screen over the hidden home: a title, 4 dots, and an error or a hint. No allocation. */

@@ -206,6 +206,14 @@
             android:authorities="io.freemytv.photos"
             android:exported="true" />
 
+        <!-- A forgotten home PIN, from a computer over adb (command in Recovery.java). Only adb's shell may call it
+             (Recovery checks). In :home, which owns the settings. -->
+        <provider
+            android:name=".Recovery"
+            android:authorities="io.freemytv.recovery"
+            android:process=":home"
+            android:exported="true" />
+
         <receiver
             android:name=".HomeReceiver"
             android:exported="false">

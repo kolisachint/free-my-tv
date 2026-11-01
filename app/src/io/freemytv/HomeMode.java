@@ -235,11 +235,13 @@ final class HomeMode {
      * boot check and an update turn it back on.
      */
     static void ensureRemoteService(Context c, long delayMs) {
-        if (RemoteKeys.supported()) ModeJob.schedule(c, ModeJob.REMOTE, null, delayMs);
+        if (RemoteKeys.supported() || Prefs.pinLocked()) ModeJob.schedule(c, ModeJob.REMOTE, null, delayMs);
     }
 
     static void ensureRemoteServiceNow(Context app) {
-        if (!RemoteKeys.supported() || !FREE.equals(state(app).optString("mode"))) return;
+        // The home PIN needs the service on every TV (it keeps other apps away while locked).
+        boolean pin = Prefs.pinLocked();
+        if (!pin && (!RemoteKeys.supported() || !FREE.equals(state(app).optString("mode")))) return;
         try (Adb adb = Adb.connect(app, 10_000, null)) {
             remoteService(app, adb, true);
         } catch (IOException e) {
@@ -527,6 +529,11 @@ final class HomeMode {
 
     /** Safety net: our home screen crashed 3 times in a row. The home screen and the screensaver go back; the rest stays. */
     static void revertHomeNow(Context app) {
+        // A home PIN is set: the TV's own home has no lock, so it stays ours (adb can still switch it, see the guide).
+        if (Prefs.pinLocked()) {
+            AppLog.w("home screen crashed 3 times; PIN set, so not handing the TV to the unlocked original home");
+            return;
+        }
         synchronized (RUN) {
             JSONObject s = state(app);
             try (Adb adb = Adb.connect(app, 10_000, null)) {
